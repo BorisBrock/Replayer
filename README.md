@@ -44,7 +44,8 @@ between take-off and landing? Replayer lets you find out.
 Put your camera next to the kicker and do five runs. Back home, open the
 folder, select all five clips and line them up at the take-off. Now play
 them together in slow motion: Where did you pump? When did you pop? How
-high was the front wheel? Differences you never notice at full speed become
+high was the front wheel? Measure the height and your speed at the lip,
+and draw the line you want to take next time. Differences you never notice at full speed become
 obvious.
 
 The same works for skiing, skateboarding, climbing, running, golf, tennis –
@@ -93,6 +94,28 @@ moment, then play, pause and step them all in sync.
 Zoom in up to 8x with the mouse wheel and drag to look at the details –
 your hands, your feet, your line.
 
+### ✏️ Draw on your clips
+
+Mark what matters right on the video: lines, arrows, circles and freehand
+strokes in six colours and any line width. Point out your body position,
+the ideal line or the spot where you should have popped. Every clip keeps
+its own drawings, and they stay in place when you zoom and pan. Made a
+mistake? Undo, redo or clear with one click.
+
+### 📏 Measure distances and heights
+
+Draw a reference line along something of known length – a bike wheel, a
+ramp, a measuring tape – and enter its real length. From then on, every
+measuring line shows its real length – in metres, centimetres, feet,
+inches, whatever unit you entered. How high did you get? How far did you jump? Now you know.
+
+### 🚀 Measure your speed
+
+Click a point – say, your front tyre – and set marker A. Step forward a
+few frames, click the same point again and set marker B. Replayer turns the
+distance and the time between the two frames into your speed, in km/h or
+mph. Find out how fast you really were on the take-off.
+
 ### 🎨 Modern dark UI with your favourite colour
 
 <p align="center">
@@ -138,7 +161,10 @@ If Replayer helps you land that jump, you can buy me a coffee. Thank you!
 | `0`                     | Reset zoom                          |
 | Drag on the video       | Pan (when zoomed in)                |
 | F, F11, double-click    | Toggle full screen                  |
-| Esc                     | Leave full screen                   |
+| Esc                     | Leave full screen / put tool away   |
+| Ctrl+Z                  | Undo drawing                        |
+| Ctrl+Y, Ctrl+Shift+Z    | Redo drawing                        |
+| Ctrl+Delete             | Clear drawings of the current clip  |
 | Ctrl+O                  | Open folder                         |
 | Ctrl+Shift+O            | Open a single file (and its folder) |
 
