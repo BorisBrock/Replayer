@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
-  <rect width="1280" height="720" fill="#1e1f24"/>
-  <rect x="24" y="24" width="1232" height="672" rx="16" fill="none" stroke="#3a86ff" stroke-width="4" stroke-dasharray="18 12"/>
-  <text x="640" y="350" fill="#e6e6e6" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="48" font-weight="600" text-anchor="middle">Zoom in on the action</text>
-  <text x="640" y="405" fill="#8a8f98" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="28" text-anchor="middle">Screenshot placeholder</text>
-</svg>

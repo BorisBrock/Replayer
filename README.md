@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/hero.svg" alt="Replayer main window" width="100%">
+  <img src="docs/images/main-window.png" alt="Replayer main window" width="100%">
 </p>
 
 ---
@@ -36,10 +36,6 @@ between take-off and landing? Replayer lets you find out.
   see exactly where one take-off was better than the other.
 
 ### Example: the mountain bike jump
-
-<p align="center">
-  <img src="docs/images/mtb-jump.svg" alt="Comparing several mountain bike jumps" width="100%">
-</p>
 
 Put your camera next to the kicker and do five runs. Back home, open the
 folder, select all five clips and line them up at the take-off. Now play
@@ -69,17 +65,13 @@ forth between takes without losing your spot.
 
 ### 🎬 Slow motion and frame stepping
 
-<p align="center">
-  <img src="docs/images/slowmo.svg" alt="Slow motion and frame stepping" width="100%">
-</p>
-
 Play back up to 20x slower, step forward and backward one frame at a time
 and loop the interesting part as often as you like.
 
 ### 🧩 Play multiple videos in parallel
 
 <p align="center">
-  <img src="docs/images/compare.svg" alt="Several clips compared side by side" width="100%">
+  <img src="docs/images/split-screen.png" alt="Several clips compared side by side" width="100%">
 </p>
 
 Select up to six clips and watch them side by side. Align them at the key
@@ -88,7 +80,7 @@ moment, then play, pause and step them all in sync.
 ### 🔍 Zoom in on the action
 
 <p align="center">
-  <img src="docs/images/zoom.svg" alt="Zooming in on the video" width="100%">
+  <img src="docs/images/zoom-pan.png" alt="Zooming in on the video" width="100%">
 </p>
 
 Zoom in up to 8x with the mouse wheel and drag to look at the details –
@@ -102,12 +94,20 @@ the ideal line or the spot where you should have popped. Every clip keeps
 its own drawings, and they stay in place when you zoom and pan. Made a
 mistake? Undo, redo or clear with one click.
 
+<p align="center">
+  <img src="docs/images/drawing.png" alt="Selectable accent colours" width="100%">
+</p>
+
 ### 📏 Measure distances and heights
 
 Draw a reference line along something of known length – a bike wheel, a
 ramp, a measuring tape – and enter its real length. From then on, every
 measuring line shows its real length – in metres, centimetres, feet,
 inches, whatever unit you entered. How high did you get? How far did you jump? Now you know.
+
+<p align="center">
+  <img src="docs/images/measure.png" alt="Selectable accent colours" width="100%">
+</p>
 
 ### 🚀 Measure your speed
 
@@ -119,7 +119,7 @@ mph. Find out how fast you really were on the take-off.
 ### 🎨 Modern dark UI with your favourite colour
 
 <p align="center">
-  <img src="docs/images/accent.svg" alt="Selectable accent colours" width="100%">
+  <img src="docs/images/accent-colors.png" alt="Selectable accent colours" width="100%">
 </p>
 
 A clean dark theme that keeps the focus on your video, with large,
