@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="packaging/replayer.png" alt="Replayer logo" width="128">
+  <img src="icon.svg" alt="Replayer logo" width="128">
 </p>
 
 <h1 align="center">Replayer</h1>
