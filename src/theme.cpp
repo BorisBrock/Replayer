@@ -1,0 +1,457 @@
+#include "theme.h"
+
+#include <QApplication>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPalette>
+#include <QStyleFactory>
+#include <QStyleHints>
+#include <QTransform>
+
+namespace {
+
+// Colour tokens shared by the palette and the stylesheet
+const QColor kWindow("#1c1d21");      // app background
+const QColor kSurface("#25272c");     // cards, transport bar
+const QColor kSurfaceHover("#2f3238");
+const QColor kBase("#16171a");        // lists, text fields
+const QColor kBorder("#34373d");
+const QColor kText("#e4e6eb");
+const QColor kTextMuted("#9aa0aa");
+const QColor kTextDisabled("#62666e");
+const QColor kTrack("#3d4047");
+
+QColor g_accent(Theme::kDefaultAccent);
+
+// Shades derived from the user's accent colour
+struct AccentColors {
+    QColor accent, hover, selection;
+    QColor onAccent, onSelection; // readable text on top of them
+};
+
+QColor mix(const QColor& a, const QColor& b, double t) {
+    return QColor::fromRgbF(a.redF() + (b.redF() - a.redF()) * t,
+                            a.greenF() + (b.greenF() - a.greenF()) * t,
+                            a.blueF() + (b.blueF() - a.blueF()) * t);
+}
+
+QColor textOn(const QColor& background) {
+    // Relative luminance (sRGB approximation): dark text on light colours
+    const double l = 0.2126 * background.redF() + 0.7152 * background.greenF()
+                   + 0.0722 * background.blueF();
+    return l > 0.6 ? QColor("#15161a") : QColor(Qt::white);
+}
+
+AccentColors accentColors(const QColor& accent) {
+    AccentColors c;
+    c.accent      = accent;
+    c.hover       = mix(accent, Qt::white, 0.18);
+    c.selection   = mix(accent, kSurface, 0.45);
+    c.onAccent    = textOn(c.accent);
+    c.onSelection = textOn(c.selection);
+    return c;
+}
+
+QPalette darkPalette(const AccentColors& a) {
+    QPalette p;
+    p.setColor(QPalette::Window, kWindow);
+    p.setColor(QPalette::WindowText, kText);
+    p.setColor(QPalette::Base, kBase);
+    p.setColor(QPalette::AlternateBase, kSurface);
+    p.setColor(QPalette::ToolTipBase, kSurface);
+    p.setColor(QPalette::ToolTipText, kText);
+    p.setColor(QPalette::PlaceholderText, kTextMuted);
+    p.setColor(QPalette::Text, kText);
+    p.setColor(QPalette::Button, kSurface);
+    p.setColor(QPalette::ButtonText, kText);
+    p.setColor(QPalette::BrightText, Qt::white);
+    p.setColor(QPalette::Light, kSurfaceHover);
+    p.setColor(QPalette::Midlight, kBorder);
+    p.setColor(QPalette::Mid, kBorder);
+    p.setColor(QPalette::Dark, kBase);
+    p.setColor(QPalette::Shadow, Qt::black);
+    p.setColor(QPalette::Highlight, a.accent);
+    p.setColor(QPalette::HighlightedText, a.onAccent);
+    p.setColor(QPalette::Link, a.hover);
+    for (auto role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText}) {
+        p.setColor(QPalette::Disabled, role, kTextDisabled);
+    }
+    p.setColor(QPalette::Disabled, QPalette::Highlight, kTrack);
+    return p;
+}
+
+QString styleSheet(const AccentColors& a) {
+    QString qss = R"(
+        QMainWindow, QSplitter { background: @window; }
+        QSplitter::handle { background: @window; }
+        QSplitter::handle:horizontal { width: 6px; }
+
+        QToolTip {
+            background: @surface; color: @text;
+            border: 1px solid @border; padding: 4px 8px;
+        }
+
+        /* Buttons */
+        QPushButton {
+            background: @surface; border: 1px solid @border; border-radius: 8px;
+            padding: 8px 16px; min-height: 18px;
+        }
+        QPushButton:hover { background: @surfaceHover; }
+        QPushButton:pressed { background: @border; }
+        QPushButton#PrimaryButton {
+            background: @accent; border-color: @accent; color: @onAccent; font-weight: 600;
+        }
+        QPushButton#PrimaryButton:hover { background: @accentHover; border-color: @accentHover; }
+
+        QToolButton {
+            background: transparent; border: none; border-radius: 8px; padding: 6px;
+        }
+        QToolButton:hover { background: @surfaceHover; }
+        QToolButton:pressed { background: @border; }
+        QToolButton:checked { background: @selection; }
+
+        /* Sliders: thin track, large round handle, tall hit area */
+        QSlider:horizontal { min-height: 28px; }
+        QSlider::groove:horizontal { height: 6px; border-radius: 3px; background: @track; }
+        QSlider::sub-page:horizontal { border-radius: 3px; background: @accent; }
+        QSlider::add-page:horizontal { border-radius: 3px; background: @track; }
+        QSlider::handle:horizontal {
+            width: 18px; height: 18px; margin: -6px 0; border-radius: 9px;
+            background: white; border: 2px solid @accent;
+        }
+        QSlider::handle:horizontal:hover { border-color: @accentHover; background: #eef4fd; }
+        QSlider::sub-page:horizontal:disabled { background: @track; }
+        QSlider::handle:horizontal:disabled { background: @textDisabled; border-color: @textDisabled; }
+
+        /* Clip list */
+        QListWidget {
+            background: @base; border: 1px solid @border; border-radius: 10px;
+            padding: 4px; outline: none;
+        }
+        QListWidget::item { padding: 8px 10px; border-radius: 6px; margin: 1px 0; }
+        QListWidget::item:hover { background: @surface; }
+        QListWidget::item:selected { background: @selection; color: @onSelection; }
+
+        /* Cards in the info panel */
+        QGroupBox {
+            background: @surface; border: none; border-radius: 10px;
+            margin-top: 26px; padding: 14px 12px 12px 12px;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin; subcontrol-position: top left;
+            left: 4px; top: 4px; color: @textMuted; font-weight: 600;
+        }
+
+        QLabel#MutedLabel { color: @textMuted; }
+        QLabel#TitleLabel { font-weight: 600; font-size: 11pt; }
+        QWidget#TransportBar { background: @surface; }
+
+        /* Comparison tiles; the current one is outlined in the accent colour */
+        QFrame#ClipTile { background: @surface; border: 2px solid @surface; border-radius: 10px; }
+        QFrame#ClipTile[current="true"] { border-color: @accent; }
+        QFrame#ClipTile[compact="false"] { background: @surface; border: none; border-radius: 0; }
+        QFrame#ClipTile QWidget#TransportBar { background: transparent; }
+        QLabel#TileTitle { font-weight: 600; }
+        QWidget#CompareBar { background: @window; }
+        QScrollArea#SidePanel, QScrollArea#SidePanel > QWidget > QWidget { background: @window; }
+
+        /* Menus */
+        QMenuBar { background: @window; padding: 2px 4px; }
+        QMenuBar::item { padding: 6px 10px; border-radius: 6px; background: transparent; }
+        QMenuBar::item:selected { background: @surface; }
+        QMenu {
+            background: @surface; border: 1px solid @border; border-radius: 8px; padding: 6px;
+        }
+        QMenu::item { padding: 7px 28px 7px 14px; border-radius: 6px; }
+        QMenu::item:checked { background: @selection; color: @onSelection; }
+        QMenu::item:selected { background: @accent; color: @onAccent; }
+        QMenu::item:disabled { color: @textDisabled; }
+        QMenu::separator { height: 1px; background: @border; margin: 6px 8px; }
+
+        /* Slim scroll bars */
+        QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
+        QScrollBar:horizontal { background: transparent; height: 10px; margin: 2px; }
+        QScrollBar::handle { background: @track; border-radius: 3px; }
+        QScrollBar::handle:hover { background: #50545c; }
+        QScrollBar::handle:vertical { min-height: 32px; }
+        QScrollBar::handle:horizontal { min-width: 32px; }
+        QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
+        QScrollBar::add-page, QScrollBar::sub-page { background: none; }
+
+        QStatusBar { background: @window; color: @textMuted; }
+        QStatusBar::item { border: none; }
+    )";
+
+    // Longest names first so "@surfaceHover" isn't clobbered by "@surface".
+    const std::pair<const char*, QColor> tokens[] = {
+        {"@surfaceHover", kSurfaceHover}, {"@textDisabled", kTextDisabled},
+        {"@onSelection", a.onSelection},  {"@accentHover", a.hover},
+        {"@onAccent", a.onAccent},        {"@textMuted", kTextMuted},
+        {"@selection", a.selection},      {"@surface", kSurface},
+        {"@window", kWindow},             {"@border", kBorder},
+        {"@accent", a.accent},            {"@track", kTrack},
+        {"@base", kBase},                 {"@text", kText},
+    };
+    for (const auto& [name, color] : tokens) qss.replace(name, color.name());
+    return qss;
+}
+
+// Draws one icon on a 24x24 design grid.
+void paintIcon(QPainter& p, Theme::Icon which) {
+    QPainterPath path;
+    // Outlines (the drawing tools) instead of filled shapes
+    auto stroke = [&p](const QPainterPath& outline, double width = 2.0) {
+        p.strokePath(outline, QPen(p.brush().color(), width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    };
+    switch (which) {
+    case Theme::Icon::Play:
+        path.moveTo(8, 5); path.lineTo(19, 12); path.lineTo(8, 19); path.closeSubpath();
+        break;
+    case Theme::Icon::Pause:
+        path.addRoundedRect(QRectF(6.5, 5, 4, 14), 1.2, 1.2);
+        path.addRoundedRect(QRectF(13.5, 5, 4, 14), 1.2, 1.2);
+        break;
+    case Theme::Icon::Stop:
+        path.addRoundedRect(QRectF(6.5, 6.5, 11, 11), 2, 2);
+        break;
+    case Theme::Icon::StepForward:
+        path.moveTo(6, 6.5); path.lineTo(14.5, 12); path.lineTo(6, 17.5); path.closeSubpath();
+        path.addRoundedRect(QRectF(15.5, 6.5, 2.6, 11), 1, 1);
+        break;
+    case Theme::Icon::StepBackward:
+        path.moveTo(18, 6.5); path.lineTo(9.5, 12); path.lineTo(18, 17.5); path.closeSubpath();
+        path.addRoundedRect(QRectF(5.9, 6.5, 2.6, 11), 1, 1);
+        break;
+    case Theme::Icon::Close:
+        p.strokePath([] {
+            QPainterPath x;
+            x.moveTo(7, 7); x.lineTo(17, 17);
+            x.moveTo(17, 7); x.lineTo(7, 17);
+            return x;
+        }(), QPen(p.brush().color(), 2.2, Qt::SolidLine, Qt::RoundCap));
+        break;
+    case Theme::Icon::LayoutGrid:
+        for (double x : {4.0, 13.0})
+            for (double y : {4.0, 13.0}) path.addRoundedRect(QRectF(x, y, 7, 7), 1.5, 1.5);
+        break;
+    case Theme::Icon::LayoutSideBySide:
+        path.addRoundedRect(QRectF(4, 5, 7, 14), 1.5, 1.5);
+        path.addRoundedRect(QRectF(13, 5, 7, 14), 1.5, 1.5);
+        break;
+    case Theme::Icon::LayoutStacked:
+        path.addRoundedRect(QRectF(4, 4, 16, 7), 1.5, 1.5);
+        path.addRoundedRect(QRectF(4, 13, 16, 7), 1.5, 1.5);
+        break;
+    case Theme::Icon::Clip:
+        // Video frame with a play symbol cut out (odd-even fill)
+        path.addRoundedRect(QRectF(3, 5, 18, 14), 3, 3);
+        path.moveTo(10, 8.8); path.lineTo(15.5, 12); path.lineTo(10, 15.2); path.closeSubpath();
+        break;
+    case Theme::Icon::Loop: {
+        // "Repeat": two rounded strokes with arrowheads pointing round the loop
+        QPainterPath strokes;
+        strokes.moveTo(5, 12.5);
+        strokes.lineTo(5, 10);
+        strokes.quadTo(5, 7, 8, 7);
+        strokes.lineTo(16.5, 7);
+        strokes.moveTo(19, 11.5);
+        strokes.lineTo(19, 14);
+        strokes.quadTo(19, 17, 16, 17);
+        strokes.lineTo(7.5, 17);
+        p.strokePath(strokes, QPen(p.brush().color(), 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        path.moveTo(20, 7); path.lineTo(16, 3.8); path.lineTo(16, 10.2); path.closeSubpath();
+        path.moveTo(4, 17); path.lineTo(8, 13.8); path.lineTo(8, 20.2); path.closeSubpath();
+        break;
+    }
+    case Theme::Icon::Line:
+        stroke([] {
+            QPainterPath s;
+            s.moveTo(5, 19); s.lineTo(19, 5);
+            return s;
+        }());
+        break;
+    case Theme::Icon::Arrow:
+        stroke([] {
+            QPainterPath s;
+            s.moveTo(5, 19); s.lineTo(15, 9);
+            return s;
+        }());
+        path.moveTo(19.5, 4.5); path.lineTo(17.8, 12.3); path.lineTo(11.7, 6.2); path.closeSubpath();
+        break;
+    case Theme::Icon::Freehand:
+        stroke([] {
+            QPainterPath s;
+            s.moveTo(4, 17);
+            s.cubicTo(6, 6, 10, 5, 12, 12);
+            s.cubicTo(14, 19, 18, 18, 20, 7);
+            return s;
+        }());
+        break;
+    case Theme::Icon::Circle:
+        stroke([] {
+            QPainterPath s;
+            s.addEllipse(QRectF(5, 5, 14, 14));
+            return s;
+        }());
+        break;
+    case Theme::Icon::Ruler:
+        // A ruler with tick marks: sets the reference length
+        stroke([] {
+            QPainterPath s;
+            s.addRoundedRect(QRectF(3, 8, 18, 8), 1.5, 1.5);
+            for (double x : {7.0, 11.0, 15.0}) {
+                s.moveTo(x, 8); s.lineTo(x, x == 11.0 ? 12.5 : 11);
+            }
+            return s;
+        }(), 1.6);
+        break;
+    case Theme::Icon::Measure:
+        // A dimension line: |<->|
+        stroke([] {
+            QPainterPath s;
+            s.moveTo(4, 7); s.lineTo(4, 17);
+            s.moveTo(20, 7); s.lineTo(20, 17);
+            s.moveTo(7, 12); s.lineTo(17, 12);
+            return s;
+        }());
+        path.moveTo(5.5, 12); path.lineTo(9, 9.3); path.lineTo(9, 14.7); path.closeSubpath();
+        path.moveTo(18.5, 12); path.lineTo(15, 9.3); path.lineTo(15, 14.7); path.closeSubpath();
+        break;
+    case Theme::Icon::Undo:
+    case Theme::Icon::Redo: {
+        // A curved arrow back to the left; redo is its mirror image
+        QPainterPath s;
+        s.moveTo(8, 9); s.lineTo(14, 9);
+        s.cubicTo(20.5, 9, 20.5, 19, 14, 19);
+        s.lineTo(9, 19);
+        QPainterPath head;
+        head.moveTo(3.5, 9); head.lineTo(9, 4.8); head.lineTo(9, 13.2); head.closeSubpath();
+        const QTransform mirror = which == Theme::Icon::Redo ? QTransform(-1, 0, 0, 1, 24, 0) : QTransform();
+        stroke(mirror.map(s));
+        path = mirror.map(head);
+        break;
+    }
+    case Theme::Icon::Trash:
+        stroke([] {
+            QPainterPath s;
+            s.moveTo(4.5, 7); s.lineTo(19.5, 7);
+            s.moveTo(9.5, 7); s.lineTo(10, 4.5); s.lineTo(14, 4.5); s.lineTo(14.5, 7);
+            s.moveTo(6.5, 7); s.lineTo(7.5, 19.5); s.lineTo(16.5, 19.5); s.lineTo(17.5, 7);
+            s.moveTo(10.5, 10.5); s.lineTo(10.5, 16);
+            s.moveTo(13.5, 10.5); s.lineTo(13.5, 16);
+            return s;
+        }(), 1.8);
+        break;
+    case Theme::Icon::MarkA:
+    case Theme::Icon::MarkB: {
+        // A marker ring with its letter
+        stroke([] {
+            QPainterPath s;
+            s.addEllipse(QRectF(3, 3, 18, 18));
+            return s;
+        }(), 1.8);
+        QFont font;
+        font.setPixelSize(12);
+        font.setBold(true);
+        path.addText(0, 0, font, which == Theme::Icon::MarkA ? "A" : "B");
+        path.translate(QPointF(12, 12) - path.boundingRect().center());
+        break;
+    }
+    }
+    p.setPen(QPen(p.brush().color(), 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.drawPath(path);
+}
+
+} // namespace
+
+namespace Theme {
+
+void apply(QApplication& app, const QColor& accent) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    // Tells the platform too, e.g. for a dark title bar on Windows
+    app.styleHints()->setColorScheme(Qt::ColorScheme::Dark);
+#endif
+    app.setStyle(QStyleFactory::create("Fusion"));
+    setAccent(accent);
+}
+
+void setAccent(const QColor& accent) {
+    g_accent = accent.isValid() ? accent : QColor(kDefaultAccent);
+    const AccentColors colors = accentColors(g_accent);
+    qApp->setPalette(darkPalette(colors));
+    qApp->setStyleSheet(styleSheet(colors));
+}
+
+QColor accent() {
+    return g_accent;
+}
+
+QList<Preset> accentPresets() {
+    return {
+        {"Blue",   QColor(kDefaultAccent)},
+        {"Teal",   QColor("#14b8a6")},
+        {"Green",  QColor("#22c55e")},
+        {"Yellow", QColor("#eab308")},
+        {"Orange", QColor("#f97316")},
+        {"Red",    QColor("#ef4444")},
+        {"Pink",   QColor("#ec4899")},
+        {"Purple", QColor("#8b5cf6")},
+    };
+}
+
+QIcon swatch(const QColor& color) {
+    QIcon result;
+    for (int scale : {1, 2, 3}) {
+        const int size = 16 * scale;
+        QPixmap pixmap(size, size);
+        pixmap.fill(Qt::transparent);
+        QPainter p(&pixmap);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(Qt::NoPen);
+        p.setBrush(color);
+        p.drawEllipse(QRectF(1, 1, size - 2, size - 2));
+        p.end();
+        result.addPixmap(pixmap);
+    }
+    return result;
+}
+
+void drawIcon(QPainter& p, Icon which, const QRectF& rect, const QColor& color) {
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing);
+    p.translate(rect.topLeft());
+    p.scale(rect.width() / 24.0, rect.height() / 24.0);
+    p.setBrush(color);
+    paintIcon(p, which);
+    p.restore();
+}
+
+QColor selectionText() {
+    return accentColors(g_accent).onSelection;
+}
+
+QIcon icon(Icon which) {
+    QIcon result;
+    const struct { QIcon::Mode mode; QColor color; } variants[] = {
+        {QIcon::Normal, kText},
+        {QIcon::Active, Qt::white},
+        {QIcon::Disabled, kTextDisabled},
+    };
+    for (const auto& v : variants) {
+        for (int scale : {1, 2, 3}) {
+            const int size = 24 * scale;
+            QPixmap pixmap(size, size);
+            pixmap.fill(Qt::transparent);
+            QPainter p(&pixmap);
+            p.setRenderHint(QPainter::Antialiasing);
+            p.scale(scale, scale);
+            p.setBrush(v.color);
+            paintIcon(p, which);
+            p.end();
+            result.addPixmap(pixmap, v.mode);
+        }
+    }
+    return result;
+}
+
+} // namespace Theme

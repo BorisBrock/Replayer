@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Replayer
+Comment=Action Cam Video Player
+Exec=replayer %f
+Icon=replayer
+Categories=AudioVideo;Video;Player;
+MimeType=video/mp4;video/x-m4v;video/x-matroska;video/quicktime;video/x-msvideo;video/mp2t;video/webm;
+Terminal=false

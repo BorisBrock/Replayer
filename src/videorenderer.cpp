@@ -1,0 +1,629 @@
+#include "videorenderer.h"
+#include "timeformat.h"
+
+#include <QMouseEvent>
+#include <QPainter>
+#include <QPainterPath>
+#include <QWheelEvent>
+#include <cmath>
+#include <QOpenGLContext>
+#include <algorithm>
+
+extern "C" {
+#include <libavutil/frame.h>
+#include <libavutil/pixdesc.h>
+}
+
+// GL 3.0 / ARB_texture_rg enums; not every platform header declares them.
+#ifndef GL_RED
+#define GL_RED 0x1903
+#endif
+#ifndef GL_RG
+#define GL_RG 0x8227
+#endif
+#ifndef GL_R8
+#define GL_R8 0x8229
+#endif
+#ifndef GL_R16
+#define GL_R16 0x822A
+#endif
+#ifndef GL_RG8
+#define GL_RG8 0x822B
+#endif
+#ifndef GL_RG16
+#define GL_RG16 0x822C
+#endif
+#ifndef GL_UNPACK_ROW_LENGTH
+#define GL_UNPACK_ROW_LENGTH 0x0CF2
+#endif
+
+namespace {
+
+const char* const kVertexShader =
+    "attribute vec2 position;\n"
+    "attribute vec2 texCoord;\n"
+    "uniform mat4 transform;\n"
+    "varying vec2 v_texCoord;\n"
+    "void main() {\n"
+    "    gl_Position = transform * vec4(position, 0.0, 1.0);\n"
+    "    v_texCoord = texCoord;\n"
+    "}\n";
+
+// Planar formats use one texture per plane; semi-planar (NV12/P010) store
+// interleaved chroma in the .rg channels of the second texture.
+const char* const kFragmentShader =
+    "#ifdef GL_ES\n"
+    "precision highp float;\n"
+    "#endif\n"
+    "varying vec2 v_texCoord;\n"
+    "uniform sampler2D texY;\n"
+    "uniform sampler2D texU;\n"
+    "uniform sampler2D texV;\n"
+    "uniform int semiPlanar;\n"
+    "uniform float sampleScale;\n"
+    "uniform mat4 colorMatrix;\n"
+    "void main() {\n"
+    "    vec3 yuv;\n"
+    "    yuv.x = texture2D(texY, v_texCoord).r;\n"
+    "    if (semiPlanar != 0)\n"
+    "        yuv.yz = texture2D(texU, v_texCoord).rg;\n"
+    "    else\n"
+    "        yuv.yz = vec2(texture2D(texU, v_texCoord).r, texture2D(texV, v_texCoord).r);\n"
+    "    gl_FragColor = vec4((colorMatrix * vec4(yuv * sampleScale, 1.0)).rgb, 1.0);\n"
+    "}\n";
+
+// Fullscreen quad: x, y, s, t
+const float kQuad[] = {
+    -1.0f, -1.0f, 0.0f, 1.0f,
+     1.0f, -1.0f, 1.0f, 1.0f,
+     1.0f,  1.0f, 1.0f, 0.0f,
+    -1.0f,  1.0f, 0.0f, 0.0f,
+};
+
+bool isFullRangeFormat(int format) {
+    return format == AV_PIX_FMT_YUVJ420P || format == AV_PIX_FMT_YUVJ422P
+        || format == AV_PIX_FMT_YUVJ444P;
+}
+
+// Maps normalized (y, u, v, 1) to (r, g, b, 1) for the frame's colour space.
+QMatrix4x4 yuvToRgbMatrix(const AVFrame* frame) {
+    float kr, kb;
+    switch (frame->colorspace) {
+    case AVCOL_SPC_BT709:
+        kr = 0.2126f; kb = 0.0722f; break;
+    case AVCOL_SPC_BT2020_NCL:
+    case AVCOL_SPC_BT2020_CL:
+        kr = 0.2627f; kb = 0.0593f; break;
+    case AVCOL_SPC_SMPTE240M:
+        kr = 0.212f;  kb = 0.087f;  break;
+    case AVCOL_SPC_BT470BG:
+    case AVCOL_SPC_SMPTE170M:
+    case AVCOL_SPC_FCC:
+        kr = 0.299f;  kb = 0.114f;  break;
+    default:
+        // Untagged: HD and larger is BT.709 in practice, SD is BT.601.
+        if (frame->height >= 720) { kr = 0.2126f; kb = 0.0722f; }
+        else                      { kr = 0.299f;  kb = 0.114f;  }
+        break;
+    }
+    const float kg = 1.0f - kr - kb;
+
+    const bool  full = frame->color_range == AVCOL_RANGE_JPEG || isFullRangeFormat(frame->format);
+    const float ys = full ? 1.0f : 255.0f / 219.0f;
+    const float yo = full ? 0.0f : 16.0f / 255.0f;
+    const float cs = full ? 1.0f : 255.0f / 224.0f;
+    const float co = 128.0f / 255.0f;
+
+    const float rv = 2.0f * (1.0f - kr) * cs;
+    const float gu = -2.0f * kb * (1.0f - kb) / kg * cs;
+    const float gv = -2.0f * kr * (1.0f - kr) / kg * cs;
+    const float bu = 2.0f * (1.0f - kb) * cs;
+
+    return QMatrix4x4(ys, 0.0f, rv,   -(ys * yo + rv * co),
+                      ys, gu,   gv,   -(ys * yo + (gu + gv) * co),
+                      ys, bu,   0.0f, -(ys * yo + bu * co),
+                      0.0f, 0.0f, 0.0f, 1.0f);
+}
+
+int ceilShift(int value, int shift) {
+    return (value + (1 << shift) - 1) >> shift;
+}
+
+bool isMarker(DrawTool tool) {
+    return tool == DrawTool::MarkA || tool == DrawTool::MarkB;
+}
+
+QPointF clampToVideo(QPointF p) {
+    return QPointF(std::clamp(p.x(), 0.0, 1.0), std::clamp(p.y(), 0.0, 1.0));
+}
+
+// e.g. "1.25 m", "38.2 cm", "112 m"
+QString formatLength(double value, const QString& unit) {
+    const int decimals = value >= 100.0 ? 0 : value >= 10.0 ? 1 : 2;
+    return QString("%1 %2").arg(value, 0, 'f', decimals).arg(unit).trimmed();
+}
+
+// Size of a label for text, in the label font (which it selects into p)
+QSizeF labelSize(QPainter& p, const QString& text) {
+    QFont font = p.font();
+    font.setBold(true);
+    p.setFont(font);
+    const QFontMetricsF fm(font);
+    return QSizeF(fm.horizontalAdvance(text) + 12.0, fm.height() + 6.0);
+}
+
+// White text in a dark box outlined in the drawing's colour
+void paintLabel(QPainter& p, const QRectF& rect, const QColor& color, const QString& text) {
+    p.setPen(QPen(color, 1.5));
+    p.setBrush(QColor(0, 0, 0, 170));
+    p.drawRoundedRect(rect, 5, 5);
+    p.setPen(Qt::white);
+    p.drawText(rect, Qt::AlignCenter, text);
+}
+
+} // namespace
+
+VideoRenderer::VideoRenderer(QWidget* parent)
+    : QOpenGLWidget(parent),
+      m_vbo(QOpenGLBuffer::VertexBuffer) {
+    setMinimumSize(320, 180);
+}
+
+VideoRenderer::~VideoRenderer() {
+    releaseGL();
+}
+
+void VideoRenderer::setFrame(const FramePtr& frame) {
+    m_frame = frame;
+    m_frameDirty = true;
+    update();
+}
+
+void VideoRenderer::clearFrame() {
+    m_frame.reset();
+    update();
+}
+
+void VideoRenderer::setRotation(int degrees) {
+    m_rotation = ((degrees % 360) + 360) % 360;
+    update();
+}
+
+void VideoRenderer::setZoom(const ViewZoom& zoom) {
+    if (zoom == m_zoom) return;
+    m_zoom = zoom;
+    updateCursor();
+    update();
+}
+
+void VideoRenderer::setAnnotations(AnnotationDoc* doc) {
+    if (doc == m_annotations) return;
+    if (m_annotations) disconnect(m_annotations, nullptr, this, nullptr);
+    m_annotations = doc;
+    if (doc) connect(doc, &AnnotationDoc::changed, this, qOverload<>(&QWidget::update));
+    m_drawing = false;
+    update();
+}
+
+void VideoRenderer::setDrawStyle(const DrawStyle& style) {
+    if (style.tool != m_drawStyle.tool) m_drawing = false;
+    m_drawStyle = style;
+    updateCursor();
+    update();
+}
+
+void VideoRenderer::updateCursor() {
+    if (m_dragging) setCursor(Qt::ClosedHandCursor);
+    else if (m_drawStyle.tool != DrawTool::None) setCursor(Qt::CrossCursor);
+    else if (m_zoom.isZoomed()) setCursor(Qt::OpenHandCursor);
+    else unsetCursor();
+}
+
+void VideoRenderer::mouseDoubleClickEvent(QMouseEvent* event) {
+    // While drawing, quick clicks are strokes, not a full-screen toggle.
+    if (event->button() == Qt::LeftButton && m_drawStyle.tool == DrawTool::None) emit doubleClicked();
+}
+
+void VideoRenderer::mousePressEvent(QMouseEvent* event) {
+    const bool tool = m_drawStyle.tool != DrawTool::None;
+    if (event->button() == Qt::LeftButton && tool && m_frame && m_annotations) {
+        const QPointF p = clampToVideo(toVideo(event->position()));
+        m_draft = Annotation();
+        m_draft.tool   = m_drawStyle.tool;
+        m_draft.color  = m_drawStyle.color;
+        m_draft.width  = m_drawStyle.width;
+        m_draft.points = {p, p};
+        if (m_draft.tool == DrawTool::Freehand || isMarker(m_draft.tool)) m_draft.points = {p};
+        m_drawing = true;
+        update();
+    } else if (m_frame && m_zoom.isZoomed()
+               && ((event->button() == Qt::LeftButton && !tool) || event->button() == Qt::MiddleButton)) {
+        // Drag to pan, when there is something to pan. While a drawing tool
+        // has the left button, the middle one pans.
+        m_dragging = true;
+        m_dragPos = event->position();
+        updateCursor();
+    }
+    QOpenGLWidget::mousePressEvent(event);
+}
+
+void VideoRenderer::mouseMoveEvent(QMouseEvent* event) {
+    if (m_drawing) {
+        const QPointF p = clampToVideo(toVideo(event->position()));
+        if (m_draft.tool == DrawTool::Freehand) {
+            // Skip points closer than a couple of pixels to keep strokes light
+            if (QLineF(toWidget(m_draft.points.last()), event->position()).length() >= 2.0) m_draft.points << p;
+        } else {
+            m_draft.points.last() = p;
+        }
+        update();
+    } else if (m_dragging) {
+        // Moving the mouse right moves the picture right: the view goes left.
+        const QSizeF scale = videoScale();
+        const QPointF delta = event->position() - m_dragPos;
+        m_dragPos = event->position();
+        emit panRequested(QPointF(-delta.x() / (scale.width() * width() * m_zoom.zoom),
+                                  -delta.y() / (scale.height() * height() * m_zoom.zoom)));
+    }
+    QOpenGLWidget::mouseMoveEvent(event);
+}
+
+void VideoRenderer::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton && m_drawing) {
+        m_drawing = false;
+        update();
+        // Ignore plain clicks: they would draw nothing visible.
+        const QPointF a = toWidget(m_draft.points.first());
+        const QPointF b = toWidget(m_draft.points.last());
+        const bool visible = isMarker(m_draft.tool)                ? true
+                           : m_draft.tool == DrawTool::Freehand ? m_draft.points.size() > 1
+                                                                : QLineF(a, b).length() >= 3.0;
+        if (visible) emit annotationDrawn(m_draft);
+    } else if (m_dragging && (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton)) {
+        m_dragging = false;
+        updateCursor();
+    }
+    QOpenGLWidget::mouseReleaseEvent(event);
+}
+
+void VideoRenderer::wheelEvent(QWheelEvent* event) {
+    if (!m_frame || event->angleDelta().y() == 0) return QOpenGLWidget::wheelEvent(event);
+    // 1.25x per wheel notch, around the point under the cursor
+    const double factor = std::pow(1.25, event->angleDelta().y() / 120.0);
+    emit zoomAtRequested(factor, toVideo(event->position()));
+    event->accept();
+}
+
+// Normalised video coordinates -> widget position (inverse of toVideo()).
+QPointF VideoRenderer::toWidget(QPointF videoPos) const {
+    const QSizeF scale = videoScale();
+    const double ndcX = (videoPos.x() - m_zoom.center.x()) * 2.0 * m_zoom.zoom * scale.width();
+    const double ndcY = (m_zoom.center.y() - videoPos.y()) * 2.0 * m_zoom.zoom * scale.height();
+    return QPointF((ndcX + 1.0) * 0.5 * width(), (1.0 - ndcY) * 0.5 * height());
+}
+
+double VideoRenderer::pixelLength(QPointF a, QPointF b) const {
+    const QSizeF size = displaySize();
+    return std::hypot((b.x() - a.x()) * size.width(), (b.y() - a.y()) * size.height());
+}
+
+// Widget position -> normalised video coordinates of the content shown there.
+QPointF VideoRenderer::toVideo(QPointF widgetPos) const {
+    const QSizeF scale = videoScale();
+    const double ndcX = 2.0 * widgetPos.x() / std::max(1, width()) - 1.0;
+    const double ndcY = 1.0 - 2.0 * widgetPos.y() / std::max(1, height());
+    return QPointF(m_zoom.center.x() + ndcX / (2.0 * m_zoom.zoom * scale.width()),
+                   m_zoom.center.y() - ndcY / (2.0 * m_zoom.zoom * scale.height()));
+}
+
+void VideoRenderer::initializeGL() {
+    initializeOpenGLFunctions();
+
+    // The context is recreated when the widget moves to another top-level
+    // window; drop our GL objects with it. initializeGL() runs again after.
+    connect(context(), &QOpenGLContext::aboutToBeDestroyed, this,
+            &VideoRenderer::releaseGL, Qt::UniqueConnection);
+
+    m_program = new QOpenGLShaderProgram();
+    if (!m_program->addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexShader)
+        || !m_program->addShaderFromSourceCode(QOpenGLShader::Fragment, kFragmentShader)
+        || !m_program->link()) {
+        qWarning("VideoRenderer: shader setup failed: %s", qPrintable(m_program->log()));
+        delete m_program;
+        m_program = nullptr;
+        return;
+    }
+
+    m_program->bind();
+    m_program->setUniformValue("texY", 0);
+    m_program->setUniformValue("texU", 1);
+    m_program->setUniformValue("texV", 2);
+    m_program->release();
+
+    m_vbo.create();
+    m_vbo.bind();
+    m_vbo.allocate(kQuad, sizeof(kQuad));
+    m_vbo.release();
+
+    m_frameDirty = true; // re-upload after a context change
+}
+
+void VideoRenderer::releaseGL() {
+    if (!m_program) return;
+    makeCurrent();
+    glDeleteTextures(3, m_textures);
+    std::fill(std::begin(m_textures), std::end(m_textures), 0u);
+    std::fill(std::begin(m_texSize), std::end(m_texSize), QSize());
+    std::fill(std::begin(m_texFormat), std::end(m_texFormat), 0);
+    m_vbo.destroy();
+    delete m_program;
+    m_program = nullptr;
+    doneCurrent();
+}
+
+bool VideoRenderer::uploadFrame() {
+    const AVFrame* f = m_frame.get();
+    const auto format = static_cast<AVPixelFormat>(f->format);
+    const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(format);
+    if (!desc || !isRenderablePixelFormat(format)) return false;
+
+    const int  planes         = av_pix_fmt_count_planes(format);
+    const int  depth          = desc->comp[0].depth;
+    const int  bytesPerSample = depth > 8 ? 2 : 1;
+    m_semiPlanar = planes == 2;
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    for (int i = 0; i < planes; i++) {
+        const bool   chroma   = i > 0;
+        const int    w        = chroma ? ceilShift(f->width, desc->log2_chroma_w) : f->width;
+        const int    h        = chroma ? ceilShift(f->height, desc->log2_chroma_h) : f->height;
+        const int    channels = (chroma && m_semiPlanar) ? 2 : 1;
+        const GLint  internal = bytesPerSample == 2 ? (channels == 2 ? GL_RG16 : GL_R16)
+                                                    : (channels == 2 ? GL_RG8 : GL_R8);
+        const GLenum glFormat = channels == 2 ? GL_RG : GL_RED;
+        const GLenum glType   = bytesPerSample == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
+
+        glActiveTexture(GL_TEXTURE0 + i);
+        if (!m_textures[i]) {
+            glGenTextures(1, &m_textures[i]);
+            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        } else {
+            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+        }
+
+        // linesize includes decoder padding; tell GL the real row stride.
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, f->linesize[i] / (channels * bytesPerSample));
+        if (m_texSize[i] != QSize(w, h) || m_texFormat[i] != internal) {
+            glTexImage2D(GL_TEXTURE_2D, 0, internal, w, h, 0, glFormat, glType, f->data[i]);
+            m_texSize[i]   = QSize(w, h);
+            m_texFormat[i] = internal;
+        } else {
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, glFormat, glType, f->data[i]);
+        }
+    }
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+
+    // 16-bit textures normalize by 65535. P010 stores samples in the high
+    // bits (already normalized); yuv420p10 stores them in the low bits.
+    m_sampleScale = (bytesPerSample == 2 && desc->comp[0].shift == 0)
+        ? 65535.0f / static_cast<float>((1 << depth) - 1)
+        : 1.0f;
+    m_colorMatrix = yuvToRgbMatrix(f);
+    return true;
+}
+
+QSizeF VideoRenderer::displaySize() const {
+    if (!m_frame) return QSizeF(1.0, 1.0);
+    double vw = m_frame->width;
+    double vh = std::max(1, m_frame->height);
+    const AVRational sar = m_frame->sample_aspect_ratio;
+    if (sar.num > 0 && sar.den > 0) vw *= av_q2d(sar);
+    if (m_rotation == 90 || m_rotation == 270) std::swap(vw, vh);
+    return QSizeF(vw, vh);
+}
+
+// Size of the letterboxed video area relative to the widget (1 = full
+// width/height), for the frame's display aspect ratio after rotation.
+QSizeF VideoRenderer::videoScale() const {
+    if (!m_frame) return QSizeF(1.0, 1.0);
+    const QSizeF size = displaySize();
+    const double videoAspect  = size.width() / size.height();
+    const double widgetAspect = static_cast<double>(width()) / std::max(1, height());
+    if (videoAspect > widgetAspect) return QSizeF(1.0, widgetAspect / videoAspect);
+    return QSizeF(videoAspect / widgetAspect, 1.0);
+}
+
+// Rotates the quad per the stream's display matrix, zooms into the region
+// around the zoom centre, and letterboxes it so the video keeps its aspect
+// ratio inside the widget.
+QMatrix4x4 VideoRenderer::vertexTransform() const {
+    const QSizeF scale = videoScale();
+    const auto zoom = static_cast<float>(m_zoom.zoom);
+    QMatrix4x4 m;
+    m.scale(static_cast<float>(scale.width()) * zoom, static_cast<float>(scale.height()) * zoom);
+    // Quad spans -1..1, so normalised centre c sits at 2c - 1 (y flipped)
+    m.translate(static_cast<float>(1.0 - 2.0 * m_zoom.center.x()),
+                static_cast<float>(2.0 * m_zoom.center.y() - 1.0));
+    m.rotate(static_cast<float>(-m_rotation), 0.0f, 0.0f, 1.0f);
+    return m;
+}
+
+void VideoRenderer::paintGL() {
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    if (!m_frame || !m_program) return;
+    if (m_frameDirty) {
+        if (!uploadFrame()) return;
+        m_frameDirty = false;
+    }
+
+    m_program->bind();
+    for (int i = 0; i < 3; i++) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+    }
+    m_program->setUniformValue("transform", vertexTransform());
+    m_program->setUniformValue("colorMatrix", m_colorMatrix);
+    m_program->setUniformValue("sampleScale", m_sampleScale);
+    m_program->setUniformValue("semiPlanar", static_cast<GLint>(m_semiPlanar ? 1 : 0));
+
+    m_vbo.bind();
+    m_program->enableAttributeArray("position");
+    m_program->enableAttributeArray("texCoord");
+    m_program->setAttributeBuffer("position", GL_FLOAT, 0, 2, 4 * sizeof(float));
+    m_program->setAttributeBuffer("texCoord", GL_FLOAT, 2 * sizeof(float), 2, 4 * sizeof(float));
+
+    // A zoomed picture stays within the video's letterboxed area.
+    const QSizeF scale = videoScale();
+    const double dpr = devicePixelRatioF();
+    const int w = static_cast<int>(std::lround(width() * scale.width() * dpr));
+    const int h = static_cast<int>(std::lround(height() * scale.height() * dpr));
+    glEnable(GL_SCISSOR_TEST);
+    glScissor((static_cast<int>(std::lround(width() * dpr)) - w) / 2,
+              (static_cast<int>(std::lround(height() * dpr)) - h) / 2, w, h);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    glDisable(GL_SCISSOR_TEST);
+
+    m_program->disableAttributeArray("position");
+    m_program->disableAttributeArray("texCoord");
+    m_vbo.release();
+    m_program->release();
+    glActiveTexture(GL_TEXTURE0);
+
+    paintAnnotations();
+}
+
+void VideoRenderer::paintAnnotations() {
+    if (!m_drawing && (!m_annotations || m_annotations->items().isEmpty())) return;
+
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    const QSizeF scale = videoScale();
+    const QSizeF area(width() * scale.width(), height() * scale.height());
+    p.setClipRect(QRectF(QPointF((width() - area.width()) / 2, (height() - area.height()) / 2), area));
+
+    // A new reference or marker replaces the old one: hide that while drawing
+    // it, and measure against the new one once it is done, not before.
+    const Annotation* reference = m_annotations ? m_annotations->reference() : nullptr;
+    const bool replacing = m_drawing && (m_draft.tool == DrawTool::Reference || isMarker(m_draft.tool));
+    const Annotation* replaced = replacing && m_annotations ? m_annotations->find(m_draft.tool) : nullptr;
+    auto shown = [this](DrawTool tool) -> const Annotation* {
+        if (m_drawing && m_draft.tool == tool) return &m_draft;
+        return m_annotations ? m_annotations->find(tool) : nullptr;
+    };
+
+    // The way from A to B, under everything else
+    const Annotation* markA = shown(DrawTool::MarkA);
+    const Annotation* markB = shown(DrawTool::MarkB);
+    if (markA && markB) {
+        p.setPen(QPen(QColor(255, 255, 255, 200), 1.5, Qt::DashLine));
+        p.drawLine(toWidget(markA->points.first()), toWidget(markB->points.first()));
+    }
+
+    if (m_annotations) {
+        for (const Annotation& a : m_annotations->items()) {
+            if (&a == replaced) continue;
+            paintAnnotation(p, a, reference);
+        }
+    }
+    if (m_drawing) paintAnnotation(p, m_draft, reference);
+}
+
+void VideoRenderer::paintAnnotation(QPainter& p, const Annotation& a, const Annotation* reference) {
+    if (a.points.isEmpty()) return;
+    p.setPen(QPen(a.color, a.width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.setBrush(Qt::NoBrush);
+    const QPointF start = toWidget(a.points.first());
+    const QPointF end   = toWidget(a.points.last());
+    const QLineF  line(start, end);
+
+    switch (a.tool) {
+    case DrawTool::None:
+        break;
+    case DrawTool::Line:
+        p.drawLine(line);
+        break;
+    case DrawTool::Arrow: {
+        if (line.length() < 1.0) break;
+        // The head grows with the line width; the shaft stops inside it so
+        // its round cap doesn't poke out at the tip.
+        const double  head   = 8.0 + 3.0 * a.width;
+        const QPointF back   = (start - end) / line.length();
+        const QPointF normal(-back.y(), back.x());
+        const QPointF base   = end + back * head;
+        p.drawLine(start, end + back * std::min(head * 0.5, line.length()));
+        p.setPen(Qt::NoPen);
+        p.setBrush(a.color);
+        p.drawPolygon(QPolygonF({end, base + normal * head * 0.5, base - normal * head * 0.5}));
+        break;
+    }
+    case DrawTool::Freehand: {
+        QPainterPath path(start);
+        for (qsizetype i = 1; i < a.points.size(); i++) path.lineTo(toWidget(a.points[i]));
+        p.drawPath(path);
+        break;
+    }
+    case DrawTool::Circle:
+        p.drawEllipse(start, line.length(), line.length());
+        break;
+    case DrawTool::Reference:
+    case DrawTool::Measure: {
+        // A line with end ticks, and its length on a label beside the middle
+        p.drawLine(line);
+        QPointF normal(0.0, -1.0); // unit, pointing up the screen
+        if (line.length() >= 1.0) {
+            normal = QPointF(line.dy(), -line.dx()) / line.length();
+            if (normal.y() > 0.0) normal = -normal;
+            const double tick = 5.0 + a.width;
+            for (const QPointF& point : {start, end}) p.drawLine(point - normal * tick, point + normal * tick);
+        }
+
+        const double pixels = pixelLength(a.points.first(), a.points.last());
+        QString text;
+        if (a.tool == DrawTool::Reference) {
+            text = a.length > 0.0 ? QString("Ref %1").arg(formatLength(a.length, a.unit)) : QString("Reference");
+        } else if (reference && reference->length > 0.0) {
+            const double refPixels = pixelLength(reference->points.first(), reference->points.last());
+            text = formatLength(refPixels > 0.0 ? pixels / refPixels * reference->length : 0.0, reference->unit);
+        } else {
+            // No reference yet: video pixels are better than nothing.
+            text = QString("%1 px").arg(std::lround(pixels));
+        }
+
+        const QSizeF box = labelSize(p, text);
+        // Far enough along the normal that the box clears the line
+        const double reach = std::abs(normal.x()) * box.width() / 2 + std::abs(normal.y()) * box.height() / 2;
+        const QPointF shift = normal * (reach + a.width / 2 + 4.0);
+        QRectF rect(line.center() + shift - QPointF(box.width() / 2, box.height() / 2), box);
+        // Flip to the other side where the video's edge would cut it off
+        if (!p.clipBoundingRect().contains(rect)) rect.translate(-2.0 * shift);
+        paintLabel(p, rect, a.color, text);
+        break;
+    }
+    case DrawTool::MarkA:
+    case DrawTool::MarkB: {
+        // A ring with cross hairs that leave the marked point itself free,
+        // and the letter and time of the frame beside it
+        const double radius = 6.0 + a.width;
+        p.drawEllipse(start, radius, radius);
+        for (const QPointF& dir : {QPointF(1, 0), QPointF(0, 1)}) {
+            p.drawLine(start + dir * radius * 0.4, start + dir * radius * 1.6);
+            p.drawLine(start - dir * radius * 0.4, start - dir * radius * 1.6);
+        }
+        QString text = a.tool == DrawTool::MarkA ? "A" : "B";
+        if (&a != &m_draft) text += "  " + formatTime(a.time);
+        const QSizeF box = labelSize(p, text);
+        QRectF rect(start + QPointF(radius, -radius - box.height()), box);
+        if (!p.clipBoundingRect().contains(rect)) rect.moveTop(start.y() + radius);
+        if (!p.clipBoundingRect().contains(rect)) rect.moveRight(start.x() - radius);
+        paintLabel(p, rect, a.color, text);
+        break;
+    }
+    }
+}

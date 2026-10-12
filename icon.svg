@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   version="1.2"
+   width="256"
+   height="256"
+   viewBox="0 0 256 256"
+   id="svg1"
+   sodipodi:docname="icon.svg"
+   inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1">
+    <linearGradient
+       id="linearGradient1"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#23cae0;stop-opacity:1;"
+         offset="0"
+         id="stop1" />
+      <stop
+         style="stop-color:#45fff9;stop-opacity:1;"
+         offset="1"
+         id="stop2" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient1"
+       id="linearGradient2"
+       x1="197.98291"
+       y1="238.5"
+       x2="82.800682"
+       y2="17.5"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="2.0812103"
+     inkscape:cx="80.962505"
+     inkscape:cy="185.469"
+     inkscape:window-width="1920"
+     inkscape:window-height="1131"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1" />
+  <circle
+     style="fill:#1e1e1e;fill-opacity:1;stroke:none;stroke-width:3.91033;stroke-opacity:1"
+     id="path2"
+     cx="128"
+     cy="128"
+     r="120" />
+  <circle
+     cx="128"
+     cy="128"
+     r="99"
+     fill="none"
+     stroke="#dc3c3c"
+     stroke-width="23"
+     id="circle1"
+     style="stroke:url(#linearGradient2);stroke-opacity:1" />
+  <path
+     id="polygon1-5"
+     d="M 92 68.000089 L 184.00099 128 L 92 128 L 92 68.000089 z "
+     transform="matrix(-0.69052837,0,0,0.69052837,183.52861,39.612369)"
+     style="fill:#ffffff;fill-opacity:1" />
+  <path
+     id="polygon1-5-7"
+     d="M 183.52929,86.56836 120,128 h 63.52929 z"
+     style="fill:#ffffff;fill-opacity:1;stroke-width:0.690528" />
+  <path
+     id="polygon1-5-6"
+     d="M 120,169.43164 56.470705,128 H 120 Z"
+     style="fill:#d4d4d4;fill-opacity:1;stroke-width:0.690528" />
+  <path
+     id="polygon1-5-7-0"
+     d="M 183.52929,169.43164 120,128 h 63.52929 z"
+     style="fill:#d4d4d4;fill-opacity:1;stroke-width:0.690528" />
+</svg>

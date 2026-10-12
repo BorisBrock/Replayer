@@ -1,0 +1,30 @@
+# Build output
+build/
+build-*/
+dist/
+tools/
+CMakeUserPresets.json
+
+# AppImage
+*.AppImage
+AppDir/
+
+# IDE files
+.idea/
+.vscode/
+.vs/
+*.kdev4
+*.user
+*.autosave
+compile_commands.json
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db
