@@ -13,6 +13,9 @@
       dist\replayer-<version>-win64\   (portable folder)
       dist\replayer-<version>-win64.zip
 
+    The version comes from -Version or REPLAYER_VERSION, else from the latest
+    v* git tag (see CMakeLists.txt).
+
 .EXAMPLE
     .\build.ps1
     .\build.ps1 -Clean -QtDir D:\dev\Qt\6.8.3\msvc2022_64 -FFmpegDir D:\dev\ffmpeg
@@ -20,6 +23,7 @@
 param(
     [string]$QtDir = $(if ($env:QT_DIR) { $env:QT_DIR } else { 'D:\dev\Qt\6.8.3\msvc2022_64' }),
     [string]$FFmpegDir = $(if ($env:FFMPEG_DIR) { $env:FFMPEG_DIR } else { 'D:\dev\ffmpeg' }),
+    [string]$Version = $env:REPLAYER_VERSION,
     [switch]$Clean
 )
 
@@ -28,9 +32,6 @@ $ErrorActionPreference = 'Stop'
 $ScriptDir = $PSScriptRoot
 $BuildDir = Join-Path $ScriptDir 'build-release'
 $DistDir = Join-Path $ScriptDir 'dist'
-$Version = (Get-Content (Join-Path $ScriptDir 'VERSION') -Raw).Trim()
-$PackageName = "replayer-$Version-win64"
-$PackageDir = Join-Path $DistDir $PackageName
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -79,7 +80,12 @@ Log 'Configuring (Release)...'
 Invoke-Native cmake -S $ScriptDir -B $BuildDir -G Ninja `
     -DCMAKE_BUILD_TYPE=Release `
     "-DCMAKE_PREFIX_PATH=$QtDir" `
-    "-DFFMPEG_ROOT=$FFmpegDir"
+    "-DFFMPEG_ROOT=$FFmpegDir" `
+    "-DREPLAYER_VERSION=$Version"
+
+$Version = (Get-Content (Join-Path $BuildDir 'version.txt') -Raw).Trim()
+$PackageName = "replayer-$Version-win64"
+$PackageDir = Join-Path $DistDir $PackageName
 
 # ── build ────────────────────────────────────────────────────────────────────
 

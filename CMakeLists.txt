@@ -1,7 +1,35 @@
 cmake_minimum_required(VERSION 3.21)
-file(READ "${CMAKE_CURRENT_LIST_DIR}/VERSION" REPLAYER_VERSION)
-string(STRIP "${REPLAYER_VERSION}" REPLAYER_VERSION)
-project(replayer VERSION ${REPLAYER_VERSION} LANGUAGES CXX)
+
+# Version: -DREPLAYER_VERSION=2.0.0 (set by the release workflow from the tag),
+# else derived from the latest v* tag, e.g. 2.0.0-5-gabc1234 for 5 commits
+# after v2.0.0. Without git or tags it is 0.0.0-dev.
+if(NOT REPLAYER_VERSION)
+    find_program(GIT_EXECUTABLE git)
+    if(GIT_EXECUTABLE)
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" describe --tags --match "v[0-9]*" --dirty
+            WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
+            OUTPUT_VARIABLE REPLAYER_VERSION
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+        string(REGEX REPLACE "^v" "" REPLAYER_VERSION "${REPLAYER_VERSION}")
+    endif()
+    if(NOT REPLAYER_VERSION)
+        set(REPLAYER_VERSION "0.0.0-dev")
+    endif()
+endif()
+
+# project() only accepts the numeric part, so 1.0.0-rc1 becomes 1.0.0 there.
+# The full string is used for the app version and the package names.
+if(NOT REPLAYER_VERSION MATCHES "^([0-9]+\\.[0-9]+\\.[0-9]+)")
+    message(FATAL_ERROR "Invalid version '${REPLAYER_VERSION}', expected x.y.z[-suffix]")
+endif()
+project(replayer VERSION ${CMAKE_MATCH_1} LANGUAGES CXX)
+message(STATUS "Replayer version: ${REPLAYER_VERSION}")
+
+# For build.ps1 and build.sh, which put the version into the package names
+file(WRITE "${CMAKE_BINARY_DIR}/version.txt" "${REPLAYER_VERSION}")
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
@@ -113,7 +141,7 @@ if(WIN32)
 endif()
 
 target_compile_definitions(replayer PRIVATE
-    REPLAYER_VERSION="${PROJECT_VERSION}"
+    REPLAYER_VERSION="${REPLAYER_VERSION}"
     QT_NO_CAST_FROM_BYTEARRAY
     QT_DISABLE_DEPRECATED_UP_TO=0x060200
 )

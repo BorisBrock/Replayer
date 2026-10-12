@@ -216,6 +216,17 @@ The paths can also be set with `QT_DIR` and `FFMPEG_DIR`. The result is a
 portable folder and `dist\replayer-<version>-win64.zip` with all Qt, FFmpeg
 and MSVC runtime DLLs included.
 
+### Versions and releases
+
+The version comes from the git tags: a build 5 commits after `v2.0.0` is
+`2.0.0-5-gabc1234`. To set it explicitly, pass `-DREPLAYER_VERSION=2.0.0` to
+CMake, `-Version 2.0.0` to `build.ps1`, or set `REPLAYER_VERSION` for
+`build.sh`.
+
+To publish a release, push a tag like `v2.0.0`. The release workflow builds
+both packages with version `2.0.0` and attaches them to the GitHub release
+`2.0.0`. Tags like `v2.0.0-rc1` and 0.x versions become pre-releases.
+
 ### Troubleshooting
 
 Set `REPLAYER_HWDEC` to choose the decoder: `none` forces software

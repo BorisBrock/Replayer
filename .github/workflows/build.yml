@@ -7,6 +7,11 @@ on:
   workflow_dispatch:
   # Called by release.yml to build the packages for a release
   workflow_call:
+    inputs:
+      version:
+        description: Version from the release tag, e.g. 2.0.0
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -19,6 +24,8 @@ env:
   QT_VERSION: 6.8.3
   # Shared LGPL build with MSVC import libraries, see build.ps1
   FFMPEG_ARCHIVE: ffmpeg-n8.1-latest-win64-lgpl-shared-8.1
+  # Empty outside of releases, then CMakeLists.txt derives it from the tags
+  REPLAYER_VERSION: ${{ inputs.version }}
 
 jobs:
   windows:
@@ -28,6 +35,9 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
+        with:
+          # All history and tags, for the version from git describe
+          fetch-depth: 0
 
       - name: Install Qt
         uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
@@ -60,6 +70,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          # All history and tags, for the version from git describe
+          fetch-depth: 0
 
       - name: Install dependencies
         run: |

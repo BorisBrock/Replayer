@@ -9,26 +9,31 @@ permissions:
   contents: read
 
 jobs:
-  check-version:
-    name: Check version
+  version:
+    name: Get version
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
-      - name: Compare tag with VERSION
+      - name: Get version from tag
+        id: version
         run: |
-          version="$(tr -d '[:space:]' < VERSION)"
-          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} doesn't match VERSION (${version})"
+          version="${GITHUB_REF_NAME#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} isn't a version like v2.0.0 or v2.0.0-rc1"
             exit 1
           fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
   build:
-    needs: check-version
+    needs: version
     uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
 
   release:
     name: Publish release
-    needs: build
+    needs: [version, build]
     runs-on: ubuntu-latest
     # Creating a release and uploading its files counts as writing repo
     # contents. The token is limited to this repo and this job.
@@ -42,6 +47,7 @@ jobs:
 
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
+          name: ${{ needs.version.outputs.version }}
           files: dist/*
           generate_release_notes: true
           # 0.x versions and versions like 1.0.0-rc1 are pre-releases

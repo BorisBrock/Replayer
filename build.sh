@@ -7,6 +7,9 @@
 # Usage:
 #   ./build.sh [--clean]
 #
+# The version comes from REPLAYER_VERSION, else from the latest v* git tag
+# (see CMakeLists.txt).
+#
 # Output:
 #   dist/replayer-<version>-x86_64.AppImage
 
@@ -17,8 +20,6 @@ BUILD_DIR="$SCRIPT_DIR/build-release"
 APPDIR="$BUILD_DIR/AppDir"
 DIST_DIR="$SCRIPT_DIR/dist"
 TOOLS_DIR="$SCRIPT_DIR/tools"
-VERSION="$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION")"
-APPIMAGE="$DIST_DIR/replayer-$VERSION-x86_64.AppImage"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -60,7 +61,11 @@ download_if_missing \
 log "Configuring (Release)..."
 cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/usr
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DREPLAYER_VERSION="${REPLAYER_VERSION:-}"
+
+VERSION="$(tr -d '[:space:]' < "$BUILD_DIR/version.txt")"
+APPIMAGE="$DIST_DIR/replayer-$VERSION-x86_64.AppImage"
 
 # ── build ─────────────────────────────────────────────────────────────────────
 
