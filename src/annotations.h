@@ -12,6 +12,9 @@
 // Drawing and measuring tools; None leaves the mouse to panning.
 enum class DrawTool { None, Line, Arrow, Freehand, Circle, Reference, Measure, MarkA, MarkB };
 
+// Reference, Measure and the speed markers; the other tools are plain drawings.
+bool isMeasurement(DrawTool tool);
+
 // How speeds are shown: km/h or mph.
 enum class UnitSystem { Metric, Imperial };
 
@@ -73,8 +76,13 @@ public:
     // Needs a reference, both markers and two different frames.
     std::optional<SpeedMeasurement> speed() const;
 
+    bool hasDrawings() const;
+    bool hasMeasurements() const;
+
     void add(const Annotation& annotation); // a new reference or marker replaces the old one
-    void clear();
+    void clear();             // drawings and measurements
+    void clearDrawings();
+    void clearMeasurements();
 
     bool canUndo() const { return !m_undo.isEmpty(); }
     bool canRedo() const { return !m_redo.isEmpty(); }
@@ -86,6 +94,7 @@ signals:
 
 private:
     void commit(QList<Annotation> items);
+    void removeWhere(bool measurements); // one undo step, if anything goes
 
     QSizeF                   m_displaySize;
     QList<Annotation>        m_items;

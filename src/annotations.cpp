@@ -16,6 +16,11 @@ double metersPerUnit(const QString& unit) {
     return units.value(unit.trimmed().toLower(), 0.0);
 }
 
+bool isMeasurement(DrawTool tool) {
+    return tool == DrawTool::Reference || tool == DrawTool::Measure || tool == DrawTool::MarkA ||
+           tool == DrawTool::MarkB;
+}
+
 std::optional<double> SpeedMeasurement::speed(UnitSystem units) const {
     const double meters = metersPerUnit(unit);
     if (meters <= 0.0 || seconds <= 0.0) return std::nullopt;
@@ -59,8 +64,32 @@ void AnnotationDoc::add(const Annotation& annotation) {
     commit(items);
 }
 
+bool AnnotationDoc::hasDrawings() const {
+    return std::any_of(m_items.cbegin(), m_items.cend(), [](const Annotation& a) { return !isMeasurement(a.tool); });
+}
+
+bool AnnotationDoc::hasMeasurements() const {
+    return std::any_of(m_items.cbegin(), m_items.cend(), [](const Annotation& a) { return isMeasurement(a.tool); });
+}
+
 void AnnotationDoc::clear() {
     if (!m_items.isEmpty()) commit({});
+}
+
+void AnnotationDoc::clearDrawings() {
+    removeWhere(false);
+}
+
+void AnnotationDoc::clearMeasurements() {
+    removeWhere(true);
+}
+
+void AnnotationDoc::removeWhere(bool measurements) {
+    QList<Annotation> items = m_items;
+    items.erase(std::remove_if(items.begin(), items.end(),
+                               [measurements](const Annotation& a) { return isMeasurement(a.tool) == measurements; }),
+                items.end());
+    if (items.size() != m_items.size()) commit(items);
 }
 
 // Snapshots are cheap: a clip holds a handful of shapes.

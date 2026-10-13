@@ -165,9 +165,9 @@ If Replayer helps you land that jump, you can buy me a coffee. Thank you!
 | Drag on the video       | Pan (when zoomed in)                |
 | F, F11, double-click    | Toggle full screen                  |
 | Esc                     | Leave full screen / put tool away   |
-| Ctrl+Z                  | Undo drawing                        |
-| Ctrl+Y, Ctrl+Shift+Z    | Redo drawing                        |
-| Ctrl+Delete             | Clear drawings of the current clip  |
+| Ctrl+Z                  | Undo drawing or measurement         |
+| Ctrl+Y, Ctrl+Shift+Z    | Redo drawing or measurement         |
+| Ctrl+Delete             | Clear all annotations of the clip   |
 | Ctrl+O                  | Open folder                         |
 | Ctrl+Shift+O            | Open a single file (and its folder) |
 

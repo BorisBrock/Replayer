@@ -9,13 +9,14 @@
 #include "videoframe.h"
 #include "viewzoom.h"
 
+class QAction;
 class QLabel;
 class QSlider;
 class QToolButton;
 class ZoomNavigator;
 
 // Right-hand panel: properties of the current clip, and the settings shared
-// by all clips (slow motion, zoom, drawing and measuring tools).
+// by all clips (slow motion, zoom, annotation tools).
 class InfoPanel : public QWidget {
     Q_OBJECT
 
@@ -44,13 +45,14 @@ signals:
     void drawStyleChanged(const DrawStyle& style);
     void undoRequested();
     void redoRequested();
+    void clearAllRequested();
     void clearDrawingsRequested();
+    void clearMeasurementsRequested();
 
 private:
     void updateSpeedLabel();
     void updateMarkerSpeed();
-    QWidget* createDrawingGroup();
-    QWidget* createMeasurementGroup();
+    QWidget* createAnnotationGroup();
     QToolButton* createToolButton(QWidget* parent, DrawTool tool, const QString& toolTip);
 
     QLabel* m_fileLabel;
@@ -71,6 +73,8 @@ private:
     QToolButton*                 m_undoButton;
     QToolButton*                 m_redoButton;
     QToolButton*                 m_clearButton;
+    QAction*                     m_clearDrawingsAction;
+    QAction*                     m_clearMeasurementsAction;
     QLabel*                      m_widthLabel;
     QLabel*                      m_referenceLabel;
     QLabel*                      m_markerSpeedLabel;

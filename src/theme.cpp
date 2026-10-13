@@ -109,6 +109,11 @@ QString styleSheet(const AccentColors& a) {
         QToolButton:hover { background: @surfaceHover; }
         QToolButton:pressed { background: @border; }
         QToolButton:checked { background: @selection; }
+        /* Split button (click: default action, arrow: menu) */
+        QToolButton[popupMode="1"] { padding-right: 18px; }
+        QToolButton::menu-button { border: none; width: 16px; }
+
+        QFrame#Separator { background: @border; border: none; min-height: 1px; max-height: 1px; }
 
         /* Sliders: thin track, large round handle, tall hit area */
         QSlider:horizontal { min-height: 28px; }

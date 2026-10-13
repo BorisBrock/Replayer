@@ -4,9 +4,12 @@
 #include "zoomnavigator.h"
 
 #include <QButtonGroup>
+#include <QFrame>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMenu>
 #include <QPushButton>
 #include <QSlider>
 #include <QToolButton>
@@ -96,8 +99,7 @@ InfoPanel::InfoPanel(QWidget* parent) : QWidget(parent) {
     mainLayout->addWidget(zoomGroup);
     setZoom(ViewZoom());
 
-    mainLayout->addWidget(createDrawingGroup());
-    mainLayout->addWidget(createMeasurementGroup());
+    mainLayout->addWidget(createAnnotationGroup());
     setAnnotations(nullptr);
 
     mainLayout->addStretch();
@@ -127,21 +129,59 @@ QToolButton* InfoPanel::createToolButton(QWidget* parent, DrawTool tool, const Q
     return button;
 }
 
-// Drawing tools, colour and line width. Drawings belong to a clip; undo,
-// redo and clear act on the current one.
-QWidget* InfoPanel::createDrawingGroup() {
-    auto* group  = new QGroupBox("DRAWING", this);
+// Drawing and measuring tools, then the colour and line width they share, then
+// undo, redo and clear. Annotations belong to a clip; the buttons act on the
+// current one. Readouts of the measurements come last.
+QWidget* InfoPanel::createAnnotationGroup() {
+    auto* group  = new QGroupBox("ANNOTATIONS", this);
     auto* layout = new QVBoxLayout(group);
     layout->setSpacing(6);
 
-    auto* toolRow = new QHBoxLayout();
-    toolRow->setSpacing(2);
-    toolRow->addWidget(createToolButton(group, DrawTool::Line, "Line"));
-    toolRow->addWidget(createToolButton(group, DrawTool::Arrow, "Arrow"));
-    toolRow->addWidget(createToolButton(group, DrawTool::Freehand, "Freehand"));
-    toolRow->addWidget(createToolButton(group, DrawTool::Circle, "Circle: drag from the centre"));
-    toolRow->addStretch();
-    layout->addLayout(toolRow);
+    // A grid, so the tool rows line up behind labels of any width
+    auto* toolGrid = new QGridLayout();
+    toolGrid->setHorizontalSpacing(8);
+    toolGrid->setVerticalSpacing(2);
+    toolGrid->setColumnStretch(1, 1);
+    layout->addLayout(toolGrid);
+    int toolRows = 0;
+    auto addToolRow = [group, toolGrid, &toolRows](const QString& title, const QList<QWidget*>& buttons) {
+        const int index = toolRows++;
+        auto* label = new QLabel(title, group);
+        label->setObjectName("MutedLabel");
+        toolGrid->addWidget(label, index, 0);
+        auto* row = new QHBoxLayout();
+        row->setSpacing(2);
+        for (QWidget* button : buttons) {
+            if (button) row->addWidget(button);
+            else row->addSpacing(12); // nullptr: gap between related groups of tools
+        }
+        row->addStretch();
+        toolGrid->addLayout(row, index, 1);
+    };
+    addToolRow("Draw", {
+        createToolButton(group, DrawTool::Line, "Line"),
+        createToolButton(group, DrawTool::Arrow, "Arrow"),
+        createToolButton(group, DrawTool::Freehand, "Freehand"),
+        createToolButton(group, DrawTool::Circle, "Circle: drag from the centre"),
+    });
+    addToolRow("Measure", {
+        createToolButton(group, DrawTool::Reference,
+                         "Reference: draw along something of known length, then enter its real length"),
+        createToolButton(group, DrawTool::Measure,
+                         "Measure: lines show their real length, relative to the reference"),
+        nullptr,
+        createToolButton(group, DrawTool::MarkA,
+                         "Speed marker A: click a point, e.g. the front tyre, on the first frame"),
+        createToolButton(group, DrawTool::MarkB, "Speed marker B: click the same point on a later frame"),
+    });
+
+    auto addSeparator = [group, layout] {
+        auto* line = new QFrame(group);
+        line->setFrameShape(QFrame::HLine);
+        line->setObjectName("Separator");
+        layout->addWidget(line);
+    };
+    addSeparator();
 
     const QColor colors[] = {
         QColor("#ef4444"), QColor("#facc15"), QColor("#22c55e"),
@@ -151,7 +191,7 @@ QWidget* InfoPanel::createDrawingGroup() {
     auto* colorRow   = new QHBoxLayout();
     auto* colorGroup = new QButtonGroup(group);
     colorRow->setSpacing(2);
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 6; ++i) {
         auto* button = new QToolButton(group);
         button->setIcon(Theme::swatch(colors[i]));
         button->setIconSize(QSize(16, 16));
@@ -186,6 +226,8 @@ QWidget* InfoPanel::createDrawingGroup() {
     layout->addWidget(widthSlider);
     layout->addWidget(m_widthLabel);
 
+    addSeparator();
+
     auto addButton = [group](QHBoxLayout* row, Theme::Icon icon, const QString& toolTip) {
         auto* button = new QToolButton(group);
         button->setIcon(Theme::icon(icon));
@@ -200,33 +242,23 @@ QWidget* InfoPanel::createDrawingGroup() {
     m_undoButton  = addButton(editRow, Theme::Icon::Undo, "Undo (Ctrl+Z)");
     m_redoButton  = addButton(editRow, Theme::Icon::Redo, "Redo (Ctrl+Y)");
     editRow->addStretch();
-    m_clearButton = addButton(editRow, Theme::Icon::Trash, "Remove all drawings and measurements from the current clip");
+    // Click clears everything; the arrow offers drawings or measurements alone.
+    m_clearButton = addButton(editRow, Theme::Icon::Trash,
+                              "Clear all annotations of the current clip (Ctrl+Delete)\n"
+                              "Use the arrow to clear only drawings or measurements");
+    m_clearButton->setPopupMode(QToolButton::MenuButtonPopup);
+    auto* clearMenu = new QMenu(m_clearButton);
+    m_clearDrawingsAction     = clearMenu->addAction("Clear Drawings", this, &InfoPanel::clearDrawingsRequested);
+    m_clearMeasurementsAction = clearMenu->addAction("Clear Measurements", this, &InfoPanel::clearMeasurementsRequested);
+    clearMenu->addSeparator();
+    clearMenu->addAction("Clear All", this, &InfoPanel::clearAllRequested);
+    m_clearButton->setMenu(clearMenu);
     connect(m_undoButton, &QToolButton::clicked, this, &InfoPanel::undoRequested);
     connect(m_redoButton, &QToolButton::clicked, this, &InfoPanel::redoRequested);
-    connect(m_clearButton, &QToolButton::clicked, this, &InfoPanel::clearDrawingsRequested);
+    connect(m_clearButton, &QToolButton::clicked, this, &InfoPanel::clearAllRequested);
     layout->addLayout(editRow);
-    return group;
-}
 
-// Measuring: a reference line of known length, then lines measured against it,
-// and speed: the way between two markers set on different frames.
-QWidget* InfoPanel::createMeasurementGroup() {
-    auto* group  = new QGroupBox("MEASUREMENT", this);
-    auto* layout = new QVBoxLayout(group);
-    layout->setSpacing(6);
-    auto* toolRow = new QHBoxLayout();
-    toolRow->setSpacing(2);
-    toolRow->addWidget(createToolButton(group, DrawTool::Reference,
-                                        "Reference: draw along something of known length, then enter its real length"));
-    toolRow->addWidget(createToolButton(group, DrawTool::Measure,
-                                        "Measure: lines show their real length, relative to the reference"));
-    toolRow->addSpacing(12);
-    toolRow->addWidget(createToolButton(group, DrawTool::MarkA,
-                                        "Speed marker A: click a point, e.g. the front tyre, on the first frame"));
-    toolRow->addWidget(createToolButton(group, DrawTool::MarkB,
-                                        "Speed marker B: click the same point on a later frame"));
-    toolRow->addStretch();
-    layout->addLayout(toolRow);
+    // Readouts of the reference and of the speed between the markers
     m_referenceLabel = new QLabel(group);
     m_referenceLabel->setObjectName("MutedLabel");
     m_referenceLabel->setWordWrap(true);
@@ -252,6 +284,8 @@ void InfoPanel::setAnnotations(const AnnotationDoc* doc) {
     m_undoButton->setEnabled(doc && doc->canUndo());
     m_redoButton->setEnabled(doc && doc->canRedo());
     m_clearButton->setEnabled(doc && !doc->items().isEmpty());
+    m_clearDrawingsAction->setEnabled(doc && doc->hasDrawings());
+    m_clearMeasurementsAction->setEnabled(doc && doc->hasMeasurements());
     const Annotation* reference = doc ? doc->reference() : nullptr;
     m_referenceLabel->setText(reference ? QString("Reference: %1 %2").arg(reference->length).arg(reference->unit)
                                         : QString("No reference yet: lengths are in video pixels"));

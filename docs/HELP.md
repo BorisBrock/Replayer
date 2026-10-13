@@ -226,8 +226,8 @@ camera position.
 
 ![Drawing on a clip](images/drawing.png)
 
-The **DRAWING** card in the side panel holds the tools to mark things on the
-video:
+The **ANNOTATIONS** card in the side panel holds the tools to mark and measure
+things on the video. The *Draw* row has the drawing tools:
 
 | Tool      | How to draw                                                |
 |-----------|------------------------------------------------------------|
@@ -239,13 +239,18 @@ video:
 Click a tool to pick it, and click it again (or press Esc) to put it away.
 While no tool is picked, the mouse pans the video again.
 
-Below the tools:
+The *Measure* row has the measuring tools (see
+[Measuring distances](#measuring-distances) and
+[Measuring speed](#measuring-speed)).
+
+Below the tools, for drawings and measurements alike:
 
 - **Colour:** red, yellow, green, blue, pink or white.
 - **Line width:** the slider sets the width of new lines.
-- **Undo** (Ctrl+Z), **Redo** (Ctrl+Y or Ctrl+Shift+Z) and **Clear**
-  (Ctrl+Delete), which removes all drawings and measurements from the current
-  clip.
+- **Undo** (Ctrl+Z) and **Redo** (Ctrl+Y or Ctrl+Shift+Z).
+- **Clear** (Ctrl+Delete) removes all drawings and measurements from the
+  current clip. The small arrow next to it clears only the drawings or only
+  the measurements. The same commands are in the *Edit* menu.
 
 Good to know:
 
@@ -261,8 +266,8 @@ Good to know:
 
 ![Measuring a height](images/measure.png)
 
-The **MEASUREMENT** card measures real lengths in the video. Measuring works
-in two steps:
+The *Measure* row of the **ANNOTATIONS** card measures real lengths in the
+video. Measuring works in two steps:
 
 1. **Draw a reference line.** Pick the *Reference* tool and draw a line along
    something whose length you know: a wheel, a ramp, a measuring tape, a door.
@@ -302,7 +307,7 @@ frames:
 3. Step forward a few frames with `.`, pick the **marker B** tool and click
    the same point again.
 
-The MEASUREMENT card shows the speed in km/h or mph, and below it the distance,
+The ANNOTATIONS card shows the speed in km/h or mph, and below it the distance,
 the time and the number of frames between the markers, e.g. *2.35 m in 0.083 s
 (20 frames)*. Each marker shows its letter and the time of its frame on the
 video.
@@ -379,9 +384,9 @@ Replayer remembers these settings between sessions:
 | G                       | Ghost overlay: tiles, blend, split (two clips) |
 | F, F11                  | Toggle full screen                         |
 | Esc                     | Leave full screen, or put the drawing tool away |
-| Ctrl+Z                  | Undo drawing                               |
-| Ctrl+Y, Ctrl+Shift+Z    | Redo drawing                               |
-| Ctrl+Delete             | Clear drawings of the current clip         |
+| Ctrl+Z                  | Undo drawing or measurement                |
+| Ctrl+Y, Ctrl+Shift+Z    | Redo drawing or measurement                |
+| Ctrl+Delete             | Clear all annotations of the current clip  |
 
 When comparing clips, the playback keys act on all of them at once.
 

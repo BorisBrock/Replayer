@@ -122,7 +122,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     connect(m_infoPanel, &InfoPanel::undoRequested, this, onCurrentAnnotations(&AnnotationDoc::undo));
     connect(m_infoPanel, &InfoPanel::redoRequested, this, onCurrentAnnotations(&AnnotationDoc::redo));
-    connect(m_infoPanel, &InfoPanel::clearDrawingsRequested, this, onCurrentAnnotations(&AnnotationDoc::clear));
+    connect(m_infoPanel, &InfoPanel::clearAllRequested, this, onCurrentAnnotations(&AnnotationDoc::clear));
+    connect(m_infoPanel, &InfoPanel::clearDrawingsRequested, this, onCurrentAnnotations(&AnnotationDoc::clearDrawings));
+    connect(m_infoPanel, &InfoPanel::clearMeasurementsRequested, this,
+            onCurrentAnnotations(&AnnotationDoc::clearMeasurements));
 
     // The navigator thumbnail follows the current clip, a few times a second.
     m_thumbnailTimer = new QTimer(this);
@@ -252,13 +255,15 @@ void MainWindow::createActions() {
     fileMenu->addSeparator();
     addAction(fileMenu, "&Quit", {QKeySequence("Ctrl+Q")}, [this] { close(); });
 
-    // Drawings of the current clip
+    // Annotations (drawings and measurements) of the current clip
     QMenu* editMenu = menuBar()->addMenu("&Edit");
-    addAction(editMenu, "&Undo Drawing", {QKeySequence("Ctrl+Z")}, onCurrentAnnotations(&AnnotationDoc::undo));
-    addAction(editMenu, "&Redo Drawing", {QKeySequence("Ctrl+Y"), QKeySequence("Ctrl+Shift+Z")},
+    addAction(editMenu, "&Undo", {QKeySequence("Ctrl+Z")}, onCurrentAnnotations(&AnnotationDoc::undo));
+    addAction(editMenu, "&Redo", {QKeySequence("Ctrl+Y"), QKeySequence("Ctrl+Shift+Z")},
               onCurrentAnnotations(&AnnotationDoc::redo));
-    addAction(editMenu, "&Clear Drawings", {QKeySequence("Ctrl+Delete")},
-              onCurrentAnnotations(&AnnotationDoc::clear));
+    editMenu->addSeparator();
+    addAction(editMenu, "Clear &Drawings", {}, onCurrentAnnotations(&AnnotationDoc::clearDrawings));
+    addAction(editMenu, "Clear &Measurements", {}, onCurrentAnnotations(&AnnotationDoc::clearMeasurements));
+    addAction(editMenu, "&Clear All", {QKeySequence("Ctrl+Delete")}, onCurrentAnnotations(&AnnotationDoc::clear));
 
     // When comparing, these act on all clips at once.
     QMenu* playMenu = menuBar()->addMenu("&Playback");
