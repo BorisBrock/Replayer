@@ -1,12 +1,15 @@
 #include "theme.h"
 
 #include <QApplication>
+#include <QIconEngine>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
 #include <QStyleFactory>
 #include <QStyleHints>
 #include <QTransform>
+
+#include <functional>
 
 namespace {
 
@@ -449,6 +452,42 @@ void paintIcon(QPainter& p, Theme::Icon which) {
     p.drawPath(path);
 }
 
+// Renders a vector icon at exactly the device pixel size it is shown at.
+// Pre-rendered pixmaps get rescaled by Qt whenever the icon size or the
+// screen's scale factor (e.g. 125 %, 150 %) doesn't match, which blurs them.
+class VectorIconEngine : public QIconEngine {
+public:
+    // Paints the icon into a rect of the given logical size
+    using Painter = std::function<void(QPainter&, const QSizeF&, QIcon::Mode)>;
+
+    explicit VectorIconEngine(Painter painter) : m_painter(std::move(painter)) {}
+
+    void paint(QPainter* painter, const QRect& rect, QIcon::Mode mode, QIcon::State state) override {
+        const qreal scale = painter->device() ? painter->device()->devicePixelRatio() : 1.0;
+        painter->drawPixmap(rect, scaledPixmap(rect.size(), mode, state, scale));
+    }
+
+    QPixmap pixmap(const QSize& size, QIcon::Mode mode, QIcon::State state) override {
+        return scaledPixmap(size, mode, state, 1.0);
+    }
+
+    // size is in logical pixels (Qt 6.8)
+    QPixmap scaledPixmap(const QSize& size, QIcon::Mode mode, QIcon::State, qreal scale) override {
+        QPixmap pixmap(QSize(qRound(size.width() * scale), qRound(size.height() * scale)));
+        pixmap.setDevicePixelRatio(scale);
+        pixmap.fill(Qt::transparent);
+        QPainter p(&pixmap);
+        p.setRenderHint(QPainter::Antialiasing);
+        m_painter(p, pixmap.deviceIndependentSize(), mode);
+        return pixmap;
+    }
+
+    QIconEngine* clone() const override { return new VectorIconEngine(m_painter); }
+
+private:
+    Painter m_painter;
+};
+
 } // namespace
 
 namespace Theme {
@@ -487,20 +526,11 @@ QList<Preset> accentPresets() {
 }
 
 QIcon swatch(const QColor& color) {
-    QIcon result;
-    for (int scale : {1, 2, 3}) {
-        const int size = 16 * scale;
-        QPixmap pixmap(size, size);
-        pixmap.fill(Qt::transparent);
-        QPainter p(&pixmap);
-        p.setRenderHint(QPainter::Antialiasing);
+    return QIcon(new VectorIconEngine([color](QPainter& p, const QSizeF& size, QIcon::Mode) {
         p.setPen(Qt::NoPen);
         p.setBrush(color);
-        p.drawEllipse(QRectF(1, 1, size - 2, size - 2));
-        p.end();
-        result.addPixmap(pixmap);
-    }
-    return result;
+        p.drawEllipse(QRectF(QPointF(1, 1), size - QSizeF(2, 2)));
+    }));
 }
 
 void drawIcon(QPainter& p, Icon which, const QRectF& rect, const QColor& color) {
@@ -518,27 +548,13 @@ QColor selectionText() {
 }
 
 QIcon icon(Icon which, bool muted) {
-    QIcon result;
-    const struct { QIcon::Mode mode; QColor color; } variants[] = {
-        {QIcon::Normal, muted ? kTextMuted : kText},
-        {QIcon::Active, Qt::white},
-        {QIcon::Disabled, kTextDisabled},
-    };
-    for (const auto& v : variants) {
-        for (int scale : {1, 2, 3}) {
-            const int size = 24 * scale;
-            QPixmap pixmap(size, size);
-            pixmap.fill(Qt::transparent);
-            QPainter p(&pixmap);
-            p.setRenderHint(QPainter::Antialiasing);
-            p.scale(scale, scale);
-            p.setBrush(v.color);
-            paintIcon(p, which);
-            p.end();
-            result.addPixmap(pixmap, v.mode);
-        }
-    }
-    return result;
+    return QIcon(new VectorIconEngine([which, muted](QPainter& p, const QSizeF& size, QIcon::Mode mode) {
+        const QColor color = mode == QIcon::Active   ? QColor(Qt::white)
+                           : mode == QIcon::Disabled ? kTextDisabled
+                           : muted                   ? kTextMuted
+                                                     : kText;
+        drawIcon(p, which, QRectF(QPointF(0, 0), size), color);
+    }));
 }
 
 } // namespace Theme
