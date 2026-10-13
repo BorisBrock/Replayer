@@ -173,6 +173,9 @@ If Replayer helps you land that jump, you can buy me a coffee. Thank you!
 
 When comparing clips, the playback shortcuts act on all of them at once.
 
+For a full description of every function, see the **[user guide](docs/HELP.md)**
+(also in Replayer under *Help → User Guide*).
+
 ---
 
 ## 🛠️ Building from source

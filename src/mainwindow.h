@@ -53,6 +53,7 @@ private:
     void createActions();
     void createUnitsMenu(QMenu* menu);
     void createAccentMenu(QMenu* menu);
+    void showAbout();
     QWidget* createCompareBar();
 
     void showClips(QStringList paths, const QString& current);

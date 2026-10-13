@@ -14,6 +14,7 @@
 #include <QApplication>
 #include <QButtonGroup>
 #include <QColorDialog>
+#include <QDesktopServices>
 #include <QDir>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -22,6 +23,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QMimeData>
 #include <QScrollArea>
 #include <QSettings>
@@ -31,6 +33,7 @@
 #include <QTimer>
 #include <QToolButton>
 #include <QTransform>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <cmath>
@@ -39,6 +42,9 @@ namespace {
 
 // More tiles get too small to be useful, and each one runs its own decoder.
 constexpr int kMaxClips = 6;
+
+const char* const kRepoUrl = "https://github.com/BorisBrock/Replayer";
+const char* const kHelpUrl = "https://github.com/BorisBrock/Replayer/blob/main/docs/HELP.md";
 
 QString appTitle() {
     return QString("%1 %2").arg(QApplication::applicationName(), QApplication::applicationVersion());
@@ -270,6 +276,13 @@ void MainWindow::createActions() {
     viewMenu->addSeparator();
     createUnitsMenu(viewMenu->addMenu("&Units"));
     createAccentMenu(viewMenu->addMenu("&Accent Color"));
+
+    QMenu* helpMenu = menuBar()->addMenu("&Help");
+    addAction(helpMenu, "&User Guide", {QKeySequence(QKeySequence::HelpContents)},
+              [] { QDesktopServices::openUrl(QUrl(kHelpUrl)); });
+    addAction(helpMenu, "&GitHub Repository", {}, [] { QDesktopServices::openUrl(QUrl(kRepoUrl)); });
+    helpMenu->addSeparator();
+    addAction(helpMenu, "&About Replayer...", {}, [this] { showAbout(); });
     QAction* escape = new QAction(this);
     escape->setShortcut(Qt::Key_Escape);
     connect(escape, &QAction::triggered, this, [this] {
@@ -278,6 +291,17 @@ void MainWindow::createActions() {
         else m_infoPanel->setDrawTool(DrawTool::None);
     });
     QMainWindow::addAction(escape);
+}
+
+void MainWindow::showAbout() {
+    QMessageBox box(this);
+    box.setWindowTitle("About " + QApplication::applicationName());
+    box.setIconPixmap(QApplication::windowIcon().pixmap(96));
+    box.setTextFormat(Qt::RichText);
+    box.setText(QString("<h2>%1</h2>Version %2").arg(QApplication::applicationName(), QApplication::applicationVersion()));
+    box.setInformativeText(QString("Video player for high-frame-rate action cam footage<br><br><a href=\"%1\">%1</a>").arg(kRepoUrl));
+    box.setTextInteractionFlags(Qt::TextBrowserInteraction); // clickable link
+    box.exec();
 }
 
 // Speeds in km/h or mph, remembered between sessions
