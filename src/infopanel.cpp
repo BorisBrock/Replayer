@@ -49,21 +49,21 @@ InfoPanel::InfoPanel(QWidget* parent) : QWidget(parent) {
     }
     mainLayout->addWidget(infoGroup);
 
-    // Speed slider selects a slow-motion factor: value / 100 = how many times
-    // slower than real time (1.0x .. 20.0x). It applies to every clip, so
-    // clips can be compared at the same speed.
+    // Speed slider selects a slow-motion factor: value / 10 = how many times
+    // slower than real time (1.0x .. 20.0x), in the 0.1x steps the label shows.
+    // It applies to every clip, so clips can be compared at the same speed.
     auto* speedGroup  = new QGroupBox("SLOW MOTION", this);
     auto* speedLayout = new QVBoxLayout(speedGroup);
     m_speedSlider = new QSlider(Qt::Horizontal, speedGroup);
-    m_speedSlider->setRange(100, 2000);
-    m_speedSlider->setValue(100);
+    m_speedSlider->setRange(10, 200);
+    m_speedSlider->setValue(10);
     m_speedSlider->setFocusPolicy(Qt::NoFocus);
     m_speedLabel = new QLabel(speedGroup);
     m_speedLabel->setObjectName("MutedLabel");
     connect(m_speedSlider, &QSlider::valueChanged, this, [this](int value) {
         updateSpeedLabel();
         // factor 2 -> multiplier 0.5 -> half speed
-        emit speedMultiplierChanged(100.0 / value);
+        emit speedMultiplierChanged(10.0 / value);
     });
     speedLayout->addWidget(m_speedSlider);
     speedLayout->addWidget(m_speedLabel);
@@ -336,7 +336,7 @@ void InfoPanel::clearVideoInfo() {
 void InfoPanel::setSpeedMultiplier(double multiplier) {
     if (multiplier <= 0.0) return;
     // multiplier = 1/factor, so factor = 1/multiplier
-    const int value = std::clamp(static_cast<int>(std::lround(100.0 / multiplier)),
+    const int value = std::clamp(static_cast<int>(std::lround(10.0 / multiplier)),
                                  m_speedSlider->minimum(), m_speedSlider->maximum());
     const QSignalBlocker blocker(m_speedSlider);
     m_speedSlider->setValue(value);
@@ -344,7 +344,7 @@ void InfoPanel::setSpeedMultiplier(double multiplier) {
 }
 
 void InfoPanel::updateSpeedLabel() {
-    const double factor = m_speedSlider->value() / 100.0;
+    const double factor = m_speedSlider->value() / 10.0;
     QString text = QString("Factor %1x").arg(factor, 0, 'f', 1);
     if (m_originalFps > 0.0) {
         // Source frames shown per second of wall-clock time
