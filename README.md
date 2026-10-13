@@ -94,6 +94,9 @@ the ideal line or the spot where you should have popped. Every clip keeps
 its own drawings, and they stay in place when you zoom and pan. Made a
 mistake? Undo, redo or clear with one click.
 
+Want to share it? Right-click the clip and choose *Export frame as .png...*
+to save the frame at full resolution, with your drawings and measurements.
+
 <p align="center">
   <img src="docs/images/drawing.png" alt="Selectable accent colours" width="100%">
 </p>

@@ -21,6 +21,10 @@ bool isRenderablePixelFormat(int format);
 // Small RGB copy of a frame (at most maxWidth wide, display aspect kept)
 QImage makeThumbnail(const AVFrame* frame, int maxWidth);
 
+// Full-size RGB copy of a frame, stretched to its display aspect ratio and
+// converted with the frame's colour space and range (not rotated)
+QImage frameToImage(const AVFrame* frame);
+
 struct VideoInfo {
     QString codec;
     QString hwAccel;      // empty when decoding in software

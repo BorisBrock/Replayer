@@ -8,6 +8,7 @@
 #include <QOpenGLWidget>
 #include <QPointer>
 #include <QSize>
+#include <QTransform>
 
 #include "annotations.h"
 #include "videoframe.h"
@@ -26,6 +27,9 @@ public:
     const ViewZoom& zoom() const { return m_zoom; }
     FramePtr frame() const { return m_frame; } // the frame on screen
     QSizeF displaySize() const; // video size in pixels after aspect ratio and rotation
+    // frame at full size, rotated, with this clip's drawings as they look
+    // unzoomed; null if there is no frame
+    QImage renderImage(const FramePtr& frame) const;
 
 public slots:
     void setFrame(const FramePtr& frame);
@@ -60,8 +64,12 @@ private:
     QPointF toVideo(QPointF widgetPos) const;
     QPointF toWidget(QPointF videoPos) const;
     double pixelLength(QPointF a, QPointF b) const; // in video pixels
-    void paintAnnotations();
-    void paintAnnotation(QPainter& p, const Annotation& a, const Annotation* reference);
+    QSizeF videoArea() const; // letterboxed video size in widget pixels, unzoomed
+    QTransform videoToWidget() const;
+    // Drawings, mapped by toView into a view clipped to clip
+    void paintAnnotations(QPainter& p, const QTransform& toView, const QRectF& clip, bool withDraft) const;
+    void paintAnnotation(QPainter& p, const QTransform& toView, const Annotation& a,
+                         const Annotation* reference) const;
     void updateCursor();
     void releaseGL();
 

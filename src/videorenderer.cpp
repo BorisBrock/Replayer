@@ -296,10 +296,22 @@ void VideoRenderer::wheelEvent(QWheelEvent* event) {
 
 // Normalised video coordinates -> widget position (inverse of toVideo()).
 QPointF VideoRenderer::toWidget(QPointF videoPos) const {
+    return videoToWidget().map(videoPos);
+}
+
+QSizeF VideoRenderer::videoArea() const {
     const QSizeF scale = videoScale();
-    const double ndcX = (videoPos.x() - m_zoom.center.x()) * 2.0 * m_zoom.zoom * scale.width();
-    const double ndcY = (m_zoom.center.y() - videoPos.y()) * 2.0 * m_zoom.zoom * scale.height();
-    return QPointF((ndcX + 1.0) * 0.5 * width(), (1.0 - ndcY) * 0.5 * height());
+    return QSizeF(width() * scale.width(), height() * scale.height());
+}
+
+// The zoom centre sits in the middle of the widget, magnified by the zoom.
+QTransform VideoRenderer::videoToWidget() const {
+    const QSizeF area = videoArea();
+    QTransform t;
+    t.translate(width() * 0.5, height() * 0.5);
+    t.scale(area.width() * m_zoom.zoom, area.height() * m_zoom.zoom);
+    t.translate(-m_zoom.center.x(), -m_zoom.center.y());
+    return t;
 }
 
 double VideoRenderer::pixelLength(QPointF a, QPointF b) const {
@@ -496,25 +508,43 @@ void VideoRenderer::paintGL() {
     m_program->release();
     glActiveTexture(GL_TEXTURE0);
 
-    paintAnnotations();
+    if (!m_drawing && (!m_annotations || m_annotations->items().isEmpty())) return;
+    QPainter p(this);
+    const QSizeF area = videoArea();
+    paintAnnotations(p, videoToWidget(),
+                     QRectF(QPointF((width() - area.width()) / 2, (height() - area.height()) / 2), area), true);
 }
 
-void VideoRenderer::paintAnnotations() {
-    if (!m_drawing && (!m_annotations || m_annotations->items().isEmpty())) return;
+QImage VideoRenderer::renderImage(const FramePtr& frame) const {
+    QImage image = frameToImage(frame.get());
+    if (image.isNull()) return {};
+    if (m_rotation != 0) image = image.transformed(QTransform().rotate(m_rotation));
+    if (!m_annotations || m_annotations->items().isEmpty()) return image;
 
-    QPainter p(this);
+    // Lay the drawings out as on screen without zoom, then scale that up to
+    // the frame, so line widths and labels keep their size relative to it.
+    const QSizeF area = videoArea();
+    if (area.isEmpty()) return image;
+    QPainter p(&image);
+    p.setFont(font());
+    p.scale(image.width() / area.width(), image.height() / area.height());
+    paintAnnotations(p, QTransform::fromScale(area.width(), area.height()), QRectF(QPointF(), area), false);
+    return image;
+}
+
+void VideoRenderer::paintAnnotations(QPainter& p, const QTransform& toView, const QRectF& clip,
+                                     bool withDraft) const {
     p.setRenderHint(QPainter::Antialiasing);
-    const QSizeF scale = videoScale();
-    const QSizeF area(width() * scale.width(), height() * scale.height());
-    p.setClipRect(QRectF(QPointF((width() - area.width()) / 2, (height() - area.height()) / 2), area));
+    p.setClipRect(clip);
 
     // A new reference or marker replaces the old one: hide that while drawing
     // it, and measure against the new one once it is done, not before.
+    const bool drawing = withDraft && m_drawing;
     const Annotation* reference = m_annotations ? m_annotations->reference() : nullptr;
-    const bool replacing = m_drawing && (m_draft.tool == DrawTool::Reference || isMarker(m_draft.tool));
+    const bool replacing = drawing && (m_draft.tool == DrawTool::Reference || isMarker(m_draft.tool));
     const Annotation* replaced = replacing && m_annotations ? m_annotations->find(m_draft.tool) : nullptr;
-    auto shown = [this](DrawTool tool) -> const Annotation* {
-        if (m_drawing && m_draft.tool == tool) return &m_draft;
+    auto shown = [this, drawing](DrawTool tool) -> const Annotation* {
+        if (drawing && m_draft.tool == tool) return &m_draft;
         return m_annotations ? m_annotations->find(tool) : nullptr;
     };
 
@@ -523,24 +553,25 @@ void VideoRenderer::paintAnnotations() {
     const Annotation* markB = shown(DrawTool::MarkB);
     if (markA && markB) {
         p.setPen(QPen(QColor(255, 255, 255, 200), 1.5, Qt::DashLine));
-        p.drawLine(toWidget(markA->points.first()), toWidget(markB->points.first()));
+        p.drawLine(toView.map(markA->points.first()), toView.map(markB->points.first()));
     }
 
     if (m_annotations) {
         for (const Annotation& a : m_annotations->items()) {
             if (&a == replaced) continue;
-            paintAnnotation(p, a, reference);
+            paintAnnotation(p, toView, a, reference);
         }
     }
-    if (m_drawing) paintAnnotation(p, m_draft, reference);
+    if (drawing) paintAnnotation(p, toView, m_draft, reference);
 }
 
-void VideoRenderer::paintAnnotation(QPainter& p, const Annotation& a, const Annotation* reference) {
+void VideoRenderer::paintAnnotation(QPainter& p, const QTransform& toView, const Annotation& a,
+                                    const Annotation* reference) const {
     if (a.points.isEmpty()) return;
     p.setPen(QPen(a.color, a.width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     p.setBrush(Qt::NoBrush);
-    const QPointF start = toWidget(a.points.first());
-    const QPointF end   = toWidget(a.points.last());
+    const QPointF start = toView.map(a.points.first());
+    const QPointF end   = toView.map(a.points.last());
     const QLineF  line(start, end);
 
     switch (a.tool) {
@@ -565,7 +596,7 @@ void VideoRenderer::paintAnnotation(QPainter& p, const Annotation& a, const Anno
     }
     case DrawTool::Freehand: {
         QPainterPath path(start);
-        for (qsizetype i = 1; i < a.points.size(); i++) path.lineTo(toWidget(a.points[i]));
+        for (qsizetype i = 1; i < a.points.size(); i++) path.lineTo(toView.map(a.points[i]));
         p.drawPath(path);
         break;
     }

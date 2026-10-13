@@ -52,8 +52,10 @@ signals:
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
 
 private:
+    void exportFrame(const FramePtr& frame, double position);
     void setStyleProperty(const char* name, bool value);
     void addAnnotation(Annotation annotation);
 

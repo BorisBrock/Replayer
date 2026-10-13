@@ -1,13 +1,18 @@
 #include "clipview.h"
 #include "playercontroller.h"
 #include "theme.h"
+#include "timeformat.h"
 #include "transportbar.h"
 #include "videorenderer.h"
 
+#include <QContextMenuEvent>
+#include <QDir>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QRegularExpression>
 #include <QStyle>
@@ -177,4 +182,31 @@ bool ClipView::eventFilter(QObject* watched, QEvent* event) {
 void ClipView::mousePressEvent(QMouseEvent* event) {
     emit activated();
     QFrame::mousePressEvent(event);
+}
+
+void ClipView::contextMenuEvent(QContextMenuEvent* event) {
+    // Keep the frame under the cursor, even if playback moves on meanwhile
+    const FramePtr frame = currentFrame();
+    const double position = m_controller->position();
+    QMenu menu(this);
+    QAction* exportAction = menu.addAction("Export frame as .png...");
+    exportAction->setEnabled(frame != nullptr);
+    connect(exportAction, &QAction::triggered, this, [this, frame, position] { exportFrame(frame, position); });
+    menu.exec(event->globalPos());
+}
+
+void ClipView::exportFrame(const FramePtr& frame, double position) {
+    const QImage image = m_videoRenderer->renderImage(frame);
+    if (image.isNull()) {
+        emit errorOccurred("Could not convert the frame");
+        return;
+    }
+    // e.g. "clip_00-12.345.png" next to the clip
+    const QFileInfo clip(m_path);
+    const QString name = QString("%1_%2.png").arg(clip.completeBaseName(), formatTime(position).replace(':', '-'));
+    const QString file = QFileDialog::getSaveFileName(this, "Export Frame", clip.dir().filePath(name),
+                                                      "PNG Images (*.png)");
+    if (file.isEmpty()) return;
+    if (!image.save(file, "PNG"))
+        emit errorOccurred(QString("Could not save %1").arg(QDir::toNativeSeparators(file)));
 }

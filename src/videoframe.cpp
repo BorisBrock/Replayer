@@ -1,6 +1,7 @@
 #include "videoframe.h"
 
 #include <algorithm>
+#include <cmath>
 
 extern "C" {
 #include <libavutil/frame.h>
@@ -42,6 +43,33 @@ QImage makeThumbnail(const AVFrame* frame, int maxWidth) {
     SwsContext* sws = sws_getContext(frame->width, frame->height, static_cast<AVPixelFormat>(frame->format),
                                      w, h, AV_PIX_FMT_RGB32, SWS_BILINEAR, nullptr, nullptr, nullptr);
     if (!sws) return {};
+    QImage image(w, h, QImage::Format_RGB32);
+    uint8_t* dst[] = {image.bits()};
+    const int dstStride[] = {static_cast<int>(image.bytesPerLine())};
+    sws_scale(sws, frame->data, frame->linesize, 0, frame->height, dst, dstStride);
+    sws_freeContext(sws);
+    return image;
+}
+
+QImage frameToImage(const AVFrame* frame) {
+    if (!frame || frame->width <= 0 || frame->height <= 0) return {};
+    int w = frame->width;
+    if (frame->sample_aspect_ratio.num > 0 && frame->sample_aspect_ratio.den > 0)
+        w = std::max(1, static_cast<int>(std::lround(w * av_q2d(frame->sample_aspect_ratio))));
+    const int h = frame->height;
+
+    SwsContext* sws = sws_getContext(frame->width, frame->height, static_cast<AVPixelFormat>(frame->format),
+                                     w, h, AV_PIX_FMT_RGB32, SWS_BICUBIC, nullptr, nullptr, nullptr);
+    if (!sws) return {};
+    // Same choice of matrix as the renderer's shader: untagged HD is BT.709.
+    int colorspace = frame->colorspace;
+    if (colorspace == AVCOL_SPC_UNSPECIFIED || colorspace == AVCOL_SPC_RESERVED || colorspace == AVCOL_SPC_RGB)
+        colorspace = frame->height >= 720 ? SWS_CS_ITU709 : SWS_CS_ITU601;
+    const bool fullRange = frame->color_range == AVCOL_RANGE_JPEG || frame->format == AV_PIX_FMT_YUVJ420P
+                        || frame->format == AV_PIX_FMT_YUVJ422P || frame->format == AV_PIX_FMT_YUVJ444P;
+    sws_setColorspaceDetails(sws, sws_getCoefficients(colorspace), fullRange ? 1 : 0,
+                             sws_getCoefficients(SWS_CS_DEFAULT), 1, 0, 1 << 16, 1 << 16);
+
     QImage image(w, h, QImage::Format_RGB32);
     uint8_t* dst[] = {image.bits()};
     const int dstStride[] = {static_cast<int>(image.bytesPerLine())};
