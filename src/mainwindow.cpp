@@ -20,6 +20,7 @@
 #include <QDropEvent>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenuBar>
@@ -338,8 +339,14 @@ void MainWindow::showAbout() {
     box.setIconPixmap(QApplication::windowIcon().pixmap(96));
     box.setTextFormat(Qt::RichText);
     box.setText(QString("<h2>%1</h2>Version %2").arg(QApplication::applicationName(), QApplication::applicationVersion()));
-    box.setInformativeText(QString("Video player for high-frame-rate action cam footage<br><br><a href=\"%1\">%1</a>").arg(kRepoUrl));
+    box.setInformativeText(
+        QString("Video player for high-frame-rate action cam footage<br><br><a href=\"%1\" style=\"white-space:nowrap\">%1</a>")
+            .arg(kRepoUrl));
     box.setTextInteractionFlags(Qt::TextBrowserInteraction); // clickable link
+    // QMessageBox ignores setMinimumWidth(), so widen it with a spacer row in its grid layout
+    if (auto* grid = qobject_cast<QGridLayout*>(box.layout()))
+        grid->addItem(new QSpacerItem(480, 0, QSizePolicy::Minimum, QSizePolicy::Expanding), grid->rowCount(), 0, 1,
+                      grid->columnCount());
     box.exec();
 }
 
