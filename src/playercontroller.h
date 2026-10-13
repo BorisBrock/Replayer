@@ -55,6 +55,7 @@ private slots:
     void onRenderTimerTick();
 
 private:
+    void startSeek(double position);
     void presentFrame(const FrameQueue::Frame& frame);
     double clockPts() const;
     void restartClock(double pts);
@@ -69,6 +70,8 @@ private:
     bool   m_playing         = false;
     bool   m_loop            = false;
     bool   m_awaitingFrame   = false; // show the next frame that arrives (after open/seek/step)
+    bool   m_seekInFlight    = false; // the decoder is still working towards a seek target
+    double m_pendingSeek     = -1.0;  // seek requested while another was in flight, or -1
     int    m_serial          = 0;     // incremented on every seek, see FrameQueue
     double m_position        = 0.0;   // pts of the frame on screen
     double m_clockBasePts    = 0.0;   // pts at the moment m_playClock was last restarted

@@ -40,6 +40,8 @@ void PlayerController::closeFile() {
     pause();
     m_renderTimer->stop();
     m_awaitingFrame = false;
+    m_seekInFlight  = false;
+    m_pendingSeek   = -1.0;
     m_decoder->close();
     m_frameQueue.reopen();
     m_serial       = 0;
@@ -83,11 +85,28 @@ void PlayerController::seek(double position) {
     if (!isOpen()) return;
     position = std::clamp(position, 0.0, std::max(0.0, m_info.duration));
 
+    // While scrubbing, seeks arrive faster than the decoder can reach them.
+    // Restarting it each time would mean it rarely finishes a frame (worse
+    // with many clips sharing the CPU), so only the latest target is kept and
+    // started once the current one has produced its frame.
+    if (m_seekInFlight) {
+        m_pendingSeek = position;
+        m_position = position;
+        restartClock(position);
+        emit positionChanged(position);
+        return;
+    }
+    startSeek(position);
+}
+
+void PlayerController::startSeek(double position) {
+    m_pendingSeek = -1.0;
     m_frameQueue.flush(++m_serial); // discard stale frames, wakes blocked push()
     m_decoder->seek(position, m_serial);
 
     m_position = position;
     restartClock(position);
+    m_seekInFlight = true;
     m_awaitingFrame = true;
     m_renderTimer->start();
     emit positionChanged(position);
@@ -146,6 +165,12 @@ void PlayerController::onRenderTimerTick() {
             restartClock(frame.pts);
         } else if (m_frameQueue.atEnd()) {
             m_awaitingFrame = false;
+        }
+        if (!m_awaitingFrame) {
+            m_seekInFlight = false;
+            // Show the frame reached (feedback while scrubbing), then go on
+            // to the latest target.
+            if (m_pendingSeek >= 0.0) startSeek(m_pendingSeek);
         }
         if (!m_awaitingFrame && !m_playing) m_renderTimer->stop();
         return;
