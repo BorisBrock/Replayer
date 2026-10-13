@@ -87,6 +87,7 @@ add_executable(replayer WIN32 MACOSX_BUNDLE
     src/transportbar.cpp    src/transportbar.h
     src/jumpsliderstyle.h
     src/infopanel.cpp       src/infopanel.h
+    src/collapsiblesection.cpp src/collapsiblesection.h
     src/zoomnavigator.cpp   src/zoomnavigator.h
     src/viewzoom.h
     src/overlay.h

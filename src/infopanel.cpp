@@ -1,4 +1,5 @@
 #include "infopanel.h"
+#include "collapsiblesection.h"
 #include "theme.h"
 #include "timeformat.h"
 #include "zoomnavigator.h"
@@ -37,7 +38,9 @@ InfoPanel::InfoPanel(QWidget* parent) : QWidget(parent) {
     auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(4, 0, 10, 10);
 
-    auto* infoGroup  = new QGroupBox("VIDEO", this);
+    // Folded away at first: worth a look now and then, but takes a lot of room
+    auto* infoSection = new CollapsibleSection("VIDEO", "video", false, this);
+    auto* infoGroup   = infoSection->body();
     auto* infoLayout = new QVBoxLayout(infoGroup);
     m_fileLabel       = new QLabel(infoGroup);
     m_codecLabel      = new QLabel(infoGroup);
@@ -50,12 +53,13 @@ InfoPanel::InfoPanel(QWidget* parent) : QWidget(parent) {
         label->setWordWrap(true); // the panel can be narrow
         infoLayout->addWidget(label);
     }
-    mainLayout->addWidget(infoGroup);
+    mainLayout->addWidget(infoSection);
 
     // Speed slider selects a slow-motion factor: value / 10 = how many times
     // slower than real time (1.0x .. 20.0x), in the 0.1x steps the label shows.
     // It applies to every clip, so clips can be compared at the same speed.
-    auto* speedGroup  = new QGroupBox("SLOW MOTION", this);
+    auto* speedSection = new CollapsibleSection("SLOW MOTION", "slowMotion", true, this);
+    auto* speedGroup   = speedSection->body();
     auto* speedLayout = new QVBoxLayout(speedGroup);
     m_speedSlider = new QSlider(Qt::Horizontal, speedGroup);
     m_speedSlider->setRange(10, 200);
@@ -70,10 +74,11 @@ InfoPanel::InfoPanel(QWidget* parent) : QWidget(parent) {
     });
     speedLayout->addWidget(m_speedSlider);
     speedLayout->addWidget(m_speedLabel);
-    mainLayout->addWidget(speedGroup);
+    mainLayout->addWidget(speedSection);
 
     // Zoom and pan, shared by all clips (they usually come from one camera).
-    auto* zoomGroup  = new QGroupBox("ZOOM", this);
+    auto* zoomSection = new CollapsibleSection("ZOOM", "zoom", true, this);
+    auto* zoomGroup   = zoomSection->body();
     auto* zoomLayout = new QVBoxLayout(zoomGroup);
     m_navigator = new ZoomNavigator(zoomGroup);
     connect(m_navigator, &ZoomNavigator::centerRequested, this, &InfoPanel::zoomCenterRequested);
@@ -96,7 +101,7 @@ InfoPanel::InfoPanel(QWidget* parent) : QWidget(parent) {
     zoomLayout->addWidget(m_navigator);
     zoomLayout->addWidget(m_zoomSlider);
     zoomLayout->addLayout(zoomRow);
-    mainLayout->addWidget(zoomGroup);
+    mainLayout->addWidget(zoomSection);
     setZoom(ViewZoom());
 
     mainLayout->addWidget(createAnnotationGroup());
@@ -133,8 +138,9 @@ QToolButton* InfoPanel::createToolButton(QWidget* parent, DrawTool tool, const Q
 // undo, redo and clear. Annotations belong to a clip; the buttons act on the
 // current one. Readouts of the measurements come last.
 QWidget* InfoPanel::createAnnotationGroup() {
-    auto* group  = new QGroupBox("ANNOTATIONS", this);
-    auto* layout = new QVBoxLayout(group);
+    auto* section = new CollapsibleSection("ANNOTATIONS", "annotations", true, this);
+    auto* group   = section->body();
+    auto* layout  = new QVBoxLayout(group);
     layout->setSpacing(6);
 
     // A grid, so the tool rows line up behind labels of any width
@@ -270,7 +276,7 @@ QWidget* InfoPanel::createAnnotationGroup() {
     m_markerDetailLabel->setWordWrap(true);
     layout->addWidget(m_markerSpeedLabel);
     layout->addWidget(m_markerDetailLabel);
-    return group;
+    return section;
 }
 
 void InfoPanel::setDrawTool(DrawTool tool) {

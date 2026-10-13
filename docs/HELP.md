@@ -30,10 +30,12 @@ The window has three columns:
 |------------|--------------------------------------------------------------------------|
 | Left       | The **clip list**: the videos in the open folder, with their durations   |
 | Centre     | The **video** with its seek bar and playback buttons; several when comparing |
-| Right      | The **side panel**: video info, slow motion, zoom, drawing and measurement |
+| Right      | The **side panel**: video info, slow motion, zoom and annotations         |
 
 Drag the borders between the columns to resize them. The side panel scrolls
-when the window is too low to show all of it.
+when the window is too low to show all of it. Click the title of a card in the
+side panel to fold it away or open it again; Replayer remembers which cards are
+open. The VIDEO card starts folded.
 
 Messages such as errors appear for a few seconds in the status bar at the
 bottom of the window.
@@ -107,8 +109,8 @@ All playback commands are also in the *Playback* menu.
 
 ### Video info
 
-The **VIDEO** card in the side panel shows the clip's file name, codec and
-decoder, resolution, frame rate and duration. The decoder tells you whether
+The **VIDEO** card in the side panel (click its title to open it) shows the
+clip's file name, codec and decoder, resolution, frame rate and duration. The decoder tells you whether
 the graphics card decodes the video (e.g. `d3d11va`, `vaapi`, `cuda`) or the
 CPU does (`software`).
 

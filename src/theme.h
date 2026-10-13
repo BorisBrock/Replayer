@@ -35,11 +35,11 @@ enum class Icon {
     Play, Pause, Stop, StepBackward, StepForward, Loop,
     Close, LayoutGrid, LayoutSideBySide, LayoutStacked, Clip,
     Line, Arrow, Freehand, Circle, Ruler, Measure, Undo, Redo, Trash, MarkA, MarkB,
-    GhostBlend, GhostSplit, GhostSplitHorizontal,
+    GhostBlend, GhostSplit, GhostSplitHorizontal, ChevronDown, ChevronRight,
 };
 
 // Vector icons drawn at runtime, so they stay crisp at any scale factor.
-QIcon icon(Icon which);
+QIcon icon(Icon which, bool muted = false); // muted: in the colour of secondary text
 // Paints an icon directly, e.g. from an item delegate.
 void drawIcon(QPainter& p, Icon which, const QRectF& rect, const QColor& color);
 

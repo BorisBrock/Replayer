@@ -146,6 +146,13 @@ QString styleSheet(const AccentColors& a) {
             subcontrol-origin: margin; subcontrol-position: top left;
             left: 4px; top: 4px; color: @textMuted; font-weight: 600;
         }
+        /* Collapsible side panel cards: the header takes the title's place */
+        QGroupBox#SectionBody { margin-top: 0; }
+        QToolButton#SectionHeader {
+            color: @textMuted; font-weight: 600; padding: 4px 6px 4px 0; margin: 4px 0 2px 0;
+        }
+        QToolButton#SectionHeader:hover { background: transparent; color: @text; }
+        QToolButton#SectionHeader:checked { background: transparent; }
 
         QLabel#MutedLabel { color: @textMuted; }
         QLabel#TitleLabel { font-weight: 600; font-size: 11pt; }
@@ -342,6 +349,17 @@ void paintIcon(QPainter& p, Theme::Icon which) {
         path.moveTo(5.5, 12); path.lineTo(9, 9.3); path.lineTo(9, 14.7); path.closeSubpath();
         path.moveTo(18.5, 12); path.lineTo(15, 9.3); path.lineTo(15, 14.7); path.closeSubpath();
         break;
+    case Theme::Icon::ChevronDown:
+    case Theme::Icon::ChevronRight: {
+        QPainterPath s;
+        if (which == Theme::Icon::ChevronDown) {
+            s.moveTo(6, 9); s.lineTo(12, 15); s.lineTo(18, 9);
+        } else {
+            s.moveTo(9, 6); s.lineTo(15, 12); s.lineTo(9, 18);
+        }
+        stroke(s, 2.5);
+        break;
+    }
     case Theme::Icon::Undo:
     case Theme::Icon::Redo: {
         // A curved arrow back to the left; redo is its mirror image
@@ -499,10 +517,10 @@ QColor selectionText() {
     return accentColors(g_accent).onSelection;
 }
 
-QIcon icon(Icon which) {
+QIcon icon(Icon which, bool muted) {
     QIcon result;
     const struct { QIcon::Mode mode; QColor color; } variants[] = {
-        {QIcon::Normal, kText},
+        {QIcon::Normal, muted ? kTextMuted : kText},
         {QIcon::Active, Qt::white},
         {QIcon::Disabled, kTextDisabled},
     };
