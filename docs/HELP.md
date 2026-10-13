@@ -163,6 +163,8 @@ When comparing, a bar above the clips acts on all of them together:
 | Grid                | Arranges the clips automatically to use the space best         |
 | Side by side        | Puts all clips in one row                                      |
 | Stacked             | Puts all clips in one column                                   |
+| Ghost: blend        | Two clips only: shows the second clip over the first, mixed    |
+| Ghost: split        | Two clips only: first clip on one side of a line, second on the other |
 
 The sync seek bar follows the outlined clip. It stops where any clip would run
 past its start or end, so all clips stay in sync.
@@ -170,6 +172,30 @@ past its start or end, so all clips stay in sync.
 All keyboard shortcuts for playback (Space, S, L, `.`, `,`, the arrow keys)
 act on **all** clips at once. Line the clips up first, then step through the
 action together.
+
+### Ghost overlay: two clips on top of each other
+
+With exactly **two** clips selected, the comparison bar shows two ghost
+buttons. They put the second clip right on top of the first, in one picture,
+for the most exact comparison: Which line was tighter? Where exactly did the
+front wheel leave the lip?
+
+- **Blend** mixes both clips. Drag the white line across the video to change
+  the mix: at the left edge you see only the first clip, at the right edge
+  only the second. The line starts in the middle (50/50); the mix is shown
+  while you drag.
+- **Split** shows the first clip before the line and the second after it,
+  both fully opaque. Drag the line to move the border. Click the split button
+  again to turn the line from upright to across (first clip above it) and
+  back.
+
+Double-click the line to put it back in the middle. **G** switches from tiles
+to blend, to split and back to tiles.
+
+The second clip's tile shrinks to its title and controls below the overlay;
+use them to line the clips up as usual. Overlay works best with clips from a
+camera that didn't move. Exporting a frame (right-click) saves the overlay
+as you see it.
 
 ---
 
@@ -350,6 +376,7 @@ Replayer remembers these settings between sessions:
 | Shift+Right / Left      | Seek forward / back 5 s                    |
 | `+` (or `=`) / `-`      | Zoom in / out                              |
 | `0`                     | Reset zoom                                 |
+| G                       | Ghost overlay: tiles, blend, split (two clips) |
 | F, F11                  | Toggle full screen                         |
 | Esc                     | Leave full screen, or put the drawing tool away |
 | Ctrl+Z                  | Undo drawing                               |
@@ -369,6 +396,7 @@ When comparing clips, the playback keys act on all of them at once.
 | Video              | Drag (middle button)           | Pan when zoomed in (any time)          |
 | Video              | Drag with a tool picked        | Draw or measure                        |
 | Video              | Double-click                   | Toggle full screen (no tool picked)    |
+| Ghost overlay line | Drag, double-click             | Change the mix or split; back to 50/50 |
 | Video              | Right-click                    | Export the frame as .png               |
 | Seek bar           | Click or drag                  | Jump to that position                  |
 | Zoom navigator     | Click, drag or mouse wheel     | Move the zoomed region, zoom           |

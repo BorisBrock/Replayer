@@ -62,6 +62,7 @@ const char* const kFragmentShader =
     "uniform int semiPlanar;\n"
     "uniform float sampleScale;\n"
     "uniform mat4 colorMatrix;\n"
+    "uniform float opacity;\n"
     "void main() {\n"
     "    vec3 yuv;\n"
     "    yuv.x = texture2D(texY, v_texCoord).r;\n"
@@ -69,7 +70,7 @@ const char* const kFragmentShader =
     "        yuv.yz = texture2D(texU, v_texCoord).rg;\n"
     "    else\n"
     "        yuv.yz = vec2(texture2D(texU, v_texCoord).r, texture2D(texV, v_texCoord).r);\n"
-    "    gl_FragColor = vec4((colorMatrix * vec4(yuv * sampleScale, 1.0)).rgb, 1.0);\n"
+    "    gl_FragColor = vec4((colorMatrix * vec4(yuv * sampleScale, 1.0)).rgb, opacity);\n"
     "}\n";
 
 // Fullscreen quad: x, y, s, t
@@ -129,6 +130,10 @@ int ceilShift(int value, int shift) {
     return (value + (1 << shift) - 1) >> shift;
 }
 
+// How close to the overlay's line (in widget pixels) a press grabs it
+constexpr double kSplitGrab = 8.0;
+constexpr double kSplitHandleRadius = 11.0;
+
 bool isMarker(DrawTool tool) {
     return tool == DrawTool::MarkA || tool == DrawTool::MarkB;
 }
@@ -174,18 +179,40 @@ VideoRenderer::~VideoRenderer() {
 }
 
 void VideoRenderer::setFrame(const FramePtr& frame) {
-    m_frame = frame;
-    m_frameDirty = true;
+    m_main.frame = frame;
+    m_main.dirty = true;
     update();
 }
 
 void VideoRenderer::clearFrame() {
-    m_frame.reset();
+    m_main.frame.reset();
     update();
 }
 
 void VideoRenderer::setRotation(int degrees) {
-    m_rotation = ((degrees % 360) + 360) % 360;
+    m_main.rotation = ((degrees % 360) + 360) % 360;
+    update();
+}
+
+void VideoRenderer::setGhostFrame(const FramePtr& frame, int rotation) {
+    m_ghost.frame    = frame;
+    m_ghost.dirty    = true;
+    m_ghost.rotation = ((rotation % 360) + 360) % 360;
+    if (m_overlay != OverlayMode::None) update();
+}
+
+void VideoRenderer::setOverlayMode(OverlayMode mode, bool horizontalSplit) {
+    horizontalSplit = mode == OverlayMode::Split && horizontalSplit;
+    // A line turned across starts in the middle, too.
+    if ((m_overlay == OverlayMode::None && mode != OverlayMode::None) || horizontalSplit != m_horizontalSplit)
+        m_split = 0.5;
+    m_overlay         = mode;
+    m_horizontalSplit = horizontalSplit;
+    m_splitDragging   = false;
+    m_splitHovered    = false;
+    // Hovering the line changes the cursor
+    setMouseTracking(mode != OverlayMode::None);
+    updateCursor();
     update();
 }
 
@@ -213,20 +240,33 @@ void VideoRenderer::setDrawStyle(const DrawStyle& style) {
 }
 
 void VideoRenderer::updateCursor() {
-    if (m_dragging) setCursor(Qt::ClosedHandCursor);
+    if (m_splitDragging || m_splitHovered) setCursor(m_horizontalSplit ? Qt::SplitVCursor : Qt::SplitHCursor);
+    else if (m_dragging) setCursor(Qt::ClosedHandCursor);
     else if (m_drawStyle.tool != DrawTool::None) setCursor(Qt::CrossCursor);
     else if (m_zoom.isZoomed()) setCursor(Qt::OpenHandCursor);
     else unsetCursor();
 }
 
 void VideoRenderer::mouseDoubleClickEvent(QMouseEvent* event) {
+    if (event->button() != Qt::LeftButton) return;
+    // On the overlay's line: back to the middle.
+    if (onSplitLine(event->position())) {
+        m_split = 0.5;
+        update();
+        return;
+    }
     // While drawing, quick clicks are strokes, not a full-screen toggle.
-    if (event->button() == Qt::LeftButton && m_drawStyle.tool == DrawTool::None) emit doubleClicked();
+    if (m_drawStyle.tool == DrawTool::None) emit doubleClicked();
 }
 
 void VideoRenderer::mousePressEvent(QMouseEvent* event) {
     const bool tool = m_drawStyle.tool != DrawTool::None;
-    if (event->button() == Qt::LeftButton && tool && m_frame && m_annotations) {
+    if (event->button() == Qt::LeftButton && onSplitLine(event->position())) {
+        // The line comes first, even with a drawing tool picked.
+        m_splitDragging = true;
+        setSplitAt(event->position());
+        updateCursor();
+    } else if (event->button() == Qt::LeftButton && tool && m_main.frame && m_annotations) {
         const QPointF p = clampToVideo(toVideo(event->position()));
         m_draft = Annotation();
         m_draft.tool   = m_drawStyle.tool;
@@ -236,7 +276,7 @@ void VideoRenderer::mousePressEvent(QMouseEvent* event) {
         if (m_draft.tool == DrawTool::Freehand || isMarker(m_draft.tool)) m_draft.points = {p};
         m_drawing = true;
         update();
-    } else if (m_frame && m_zoom.isZoomed()
+    } else if (m_main.frame && m_zoom.isZoomed()
                && ((event->button() == Qt::LeftButton && !tool) || event->button() == Qt::MiddleButton)) {
         // Drag to pan, when there is something to pan. While a drawing tool
         // has the left button, the middle one pans.
@@ -248,7 +288,9 @@ void VideoRenderer::mousePressEvent(QMouseEvent* event) {
 }
 
 void VideoRenderer::mouseMoveEvent(QMouseEvent* event) {
-    if (m_drawing) {
+    if (m_splitDragging) {
+        setSplitAt(event->position());
+    } else if (m_drawing) {
         const QPointF p = clampToVideo(toVideo(event->position()));
         if (m_draft.tool == DrawTool::Freehand) {
             // Skip points closer than a couple of pixels to keep strokes light
@@ -264,12 +306,23 @@ void VideoRenderer::mouseMoveEvent(QMouseEvent* event) {
         m_dragPos = event->position();
         emit panRequested(QPointF(-delta.x() / (scale.width() * width() * m_zoom.zoom),
                                   -delta.y() / (scale.height() * height() * m_zoom.zoom)));
+    } else if (event->buttons() == Qt::NoButton) {
+        const bool hovered = onSplitLine(event->position());
+        if (hovered != m_splitHovered) {
+            m_splitHovered = hovered;
+            updateCursor();
+        }
     }
     QOpenGLWidget::mouseMoveEvent(event);
 }
 
 void VideoRenderer::mouseReleaseEvent(QMouseEvent* event) {
-    if (event->button() == Qt::LeftButton && m_drawing) {
+    if (event->button() == Qt::LeftButton && m_splitDragging) {
+        m_splitDragging = false;
+        m_splitHovered  = onSplitLine(event->position());
+        updateCursor();
+        update(); // hides the mix label
+    } else if (event->button() == Qt::LeftButton && m_drawing) {
         m_drawing = false;
         update();
         // Ignore plain clicks: they would draw nothing visible.
@@ -287,7 +340,7 @@ void VideoRenderer::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void VideoRenderer::wheelEvent(QWheelEvent* event) {
-    if (!m_frame || event->angleDelta().y() == 0) return QOpenGLWidget::wheelEvent(event);
+    if (!m_main.frame || event->angleDelta().y() == 0) return QOpenGLWidget::wheelEvent(event);
     // 1.25x per wheel notch, around the point under the cursor
     const double factor = std::pow(1.25, event->angleDelta().y() / 120.0);
     emit zoomAtRequested(factor, toVideo(event->position()));
@@ -302,6 +355,34 @@ QPointF VideoRenderer::toWidget(QPointF videoPos) const {
 QSizeF VideoRenderer::videoArea() const {
     const QSizeF scale = videoScale();
     return QSizeF(width() * scale.width(), height() * scale.height());
+}
+
+QRectF VideoRenderer::videoRect() const {
+    const QSizeF area = videoArea();
+    return QRectF(QPointF((width() - area.width()) / 2, (height() - area.height()) / 2), area);
+}
+
+// The line sits in the letterboxed area, which zooming doesn't change, so it
+// stays in view however far the picture is zoomed in.
+bool VideoRenderer::onSplitLine(QPointF widgetPos) const {
+    if (!overlayShown()) return false;
+    const QRectF area = videoRect();
+    if (!area.adjusted(-kSplitGrab, -kSplitGrab, kSplitGrab, kSplitGrab).contains(widgetPos)) return false;
+    const double distance = m_horizontalSplit ? widgetPos.y() - (area.top() + m_split * area.height())
+                                              : widgetPos.x() - (area.left() + m_split * area.width());
+    // The round handle in the middle is easier to hit than the line.
+    const QPointF handle = m_horizontalSplit ? QPointF(area.center().x(), area.top() + m_split * area.height())
+                                             : QPointF(area.left() + m_split * area.width(), area.center().y());
+    return std::abs(distance) <= kSplitGrab
+        || QLineF(widgetPos, handle).length() <= kSplitHandleRadius + kSplitGrab / 2;
+}
+
+void VideoRenderer::setSplitAt(QPointF widgetPos) {
+    const QRectF area = videoRect();
+    const double split = m_horizontalSplit ? (widgetPos.y() - area.top()) / std::max(1.0, area.height())
+                                           : (widgetPos.x() - area.left()) / std::max(1.0, area.width());
+    m_split = std::clamp(split, 0.0, 1.0);
+    update();
 }
 
 // The zoom centre sits in the middle of the widget, magnified by the zoom.
@@ -350,6 +431,7 @@ void VideoRenderer::initializeGL() {
     m_program->setUniformValue("texY", 0);
     m_program->setUniformValue("texU", 1);
     m_program->setUniformValue("texV", 2);
+    m_program->setUniformValue("opacity", 1.0f);
     m_program->release();
 
     m_vbo.create();
@@ -357,24 +439,28 @@ void VideoRenderer::initializeGL() {
     m_vbo.allocate(kQuad, sizeof(kQuad));
     m_vbo.release();
 
-    m_frameDirty = true; // re-upload after a context change
+    // re-upload after a context change
+    m_main.dirty  = true;
+    m_ghost.dirty = true;
 }
 
 void VideoRenderer::releaseGL() {
     if (!m_program) return;
     makeCurrent();
-    glDeleteTextures(3, m_textures);
-    std::fill(std::begin(m_textures), std::end(m_textures), 0u);
-    std::fill(std::begin(m_texSize), std::end(m_texSize), QSize());
-    std::fill(std::begin(m_texFormat), std::end(m_texFormat), 0);
+    for (Layer* layer : {&m_main, &m_ghost}) {
+        glDeleteTextures(3, layer->textures);
+        std::fill(std::begin(layer->textures), std::end(layer->textures), 0u);
+        std::fill(std::begin(layer->texSize), std::end(layer->texSize), QSize());
+        std::fill(std::begin(layer->texFormat), std::end(layer->texFormat), 0);
+    }
     m_vbo.destroy();
     delete m_program;
     m_program = nullptr;
     doneCurrent();
 }
 
-bool VideoRenderer::uploadFrame() {
-    const AVFrame* f = m_frame.get();
+bool VideoRenderer::uploadFrame(Layer& layer) {
+    const AVFrame* f = layer.frame.get();
     const auto format = static_cast<AVPixelFormat>(f->format);
     const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(format);
     if (!desc || !isRenderablePixelFormat(format)) return false;
@@ -382,37 +468,37 @@ bool VideoRenderer::uploadFrame() {
     const int  planes         = av_pix_fmt_count_planes(format);
     const int  depth          = desc->comp[0].depth;
     const int  bytesPerSample = depth > 8 ? 2 : 1;
-    m_semiPlanar = planes == 2;
+    layer.semiPlanar = planes == 2;
 
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     for (int i = 0; i < planes; i++) {
         const bool   chroma   = i > 0;
         const int    w        = chroma ? ceilShift(f->width, desc->log2_chroma_w) : f->width;
         const int    h        = chroma ? ceilShift(f->height, desc->log2_chroma_h) : f->height;
-        const int    channels = (chroma && m_semiPlanar) ? 2 : 1;
+        const int    channels = (chroma && layer.semiPlanar) ? 2 : 1;
         const GLint  internal = bytesPerSample == 2 ? (channels == 2 ? GL_RG16 : GL_R16)
                                                     : (channels == 2 ? GL_RG8 : GL_R8);
         const GLenum glFormat = channels == 2 ? GL_RG : GL_RED;
         const GLenum glType   = bytesPerSample == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
 
         glActiveTexture(GL_TEXTURE0 + i);
-        if (!m_textures[i]) {
-            glGenTextures(1, &m_textures[i]);
-            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+        if (!layer.textures[i]) {
+            glGenTextures(1, &layer.textures[i]);
+            glBindTexture(GL_TEXTURE_2D, layer.textures[i]);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         } else {
-            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+            glBindTexture(GL_TEXTURE_2D, layer.textures[i]);
         }
 
         // linesize includes decoder padding; tell GL the real row stride.
         glPixelStorei(GL_UNPACK_ROW_LENGTH, f->linesize[i] / (channels * bytesPerSample));
-        if (m_texSize[i] != QSize(w, h) || m_texFormat[i] != internal) {
+        if (layer.texSize[i] != QSize(w, h) || layer.texFormat[i] != internal) {
             glTexImage2D(GL_TEXTURE_2D, 0, internal, w, h, 0, glFormat, glType, f->data[i]);
-            m_texSize[i]   = QSize(w, h);
-            m_texFormat[i] = internal;
+            layer.texSize[i]   = QSize(w, h);
+            layer.texFormat[i] = internal;
         } else {
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, glFormat, glType, f->data[i]);
         }
@@ -422,28 +508,28 @@ bool VideoRenderer::uploadFrame() {
 
     // 16-bit textures normalize by 65535. P010 stores samples in the high
     // bits (already normalized); yuv420p10 stores them in the low bits.
-    m_sampleScale = (bytesPerSample == 2 && desc->comp[0].shift == 0)
+    layer.sampleScale = (bytesPerSample == 2 && desc->comp[0].shift == 0)
         ? 65535.0f / static_cast<float>((1 << depth) - 1)
         : 1.0f;
-    m_colorMatrix = yuvToRgbMatrix(f);
+    layer.colorMatrix = yuvToRgbMatrix(f);
     return true;
 }
 
-QSizeF VideoRenderer::displaySize() const {
-    if (!m_frame) return QSizeF(1.0, 1.0);
-    double vw = m_frame->width;
-    double vh = std::max(1, m_frame->height);
-    const AVRational sar = m_frame->sample_aspect_ratio;
+QSizeF VideoRenderer::displaySize(const Layer& layer) const {
+    if (!layer.frame) return QSizeF(1.0, 1.0);
+    double vw = layer.frame->width;
+    double vh = std::max(1, layer.frame->height);
+    const AVRational sar = layer.frame->sample_aspect_ratio;
     if (sar.num > 0 && sar.den > 0) vw *= av_q2d(sar);
-    if (m_rotation == 90 || m_rotation == 270) std::swap(vw, vh);
+    if (layer.rotation == 90 || layer.rotation == 270) std::swap(vw, vh);
     return QSizeF(vw, vh);
 }
 
 // Size of the letterboxed video area relative to the widget (1 = full
 // width/height), for the frame's display aspect ratio after rotation.
-QSizeF VideoRenderer::videoScale() const {
-    if (!m_frame) return QSizeF(1.0, 1.0);
-    const QSizeF size = displaySize();
+QSizeF VideoRenderer::videoScale(const Layer& layer) const {
+    if (!layer.frame) return QSizeF(1.0, 1.0);
+    const QSizeF size = displaySize(layer);
     const double videoAspect  = size.width() / size.height();
     const double widgetAspect = static_cast<double>(width()) / std::max(1, height());
     if (videoAspect > widgetAspect) return QSizeF(1.0, widgetAspect / videoAspect);
@@ -453,15 +539,15 @@ QSizeF VideoRenderer::videoScale() const {
 // Rotates the quad per the stream's display matrix, zooms into the region
 // around the zoom centre, and letterboxes it so the video keeps its aspect
 // ratio inside the widget.
-QMatrix4x4 VideoRenderer::vertexTransform() const {
-    const QSizeF scale = videoScale();
+QMatrix4x4 VideoRenderer::vertexTransform(const Layer& layer) const {
+    const QSizeF scale = videoScale(layer);
     const auto zoom = static_cast<float>(m_zoom.zoom);
     QMatrix4x4 m;
     m.scale(static_cast<float>(scale.width()) * zoom, static_cast<float>(scale.height()) * zoom);
     // Quad spans -1..1, so normalised centre c sits at 2c - 1 (y flipped)
     m.translate(static_cast<float>(1.0 - 2.0 * m_zoom.center.x()),
                 static_cast<float>(2.0 * m_zoom.center.y() - 1.0));
-    m.rotate(static_cast<float>(-m_rotation), 0.0f, 0.0f, 1.0f);
+    m.rotate(static_cast<float>(-layer.rotation), 0.0f, 0.0f, 1.0f);
     return m;
 }
 
@@ -469,37 +555,60 @@ void VideoRenderer::paintGL() {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    if (!m_frame || !m_program) return;
-    if (m_frameDirty) {
-        if (!uploadFrame()) return;
-        m_frameDirty = false;
+    if (!m_main.frame || !m_program) return;
+    for (Layer* layer : {&m_main, &m_ghost}) {
+        if (!layer->frame || !layer->dirty) continue;
+        if (layer == &m_ghost && m_overlay == OverlayMode::None) continue; // not needed yet
+        if (!uploadFrame(*layer)) {
+            if (layer == &m_main) return;
+            layer->frame.reset();
+        }
+        layer->dirty = false;
     }
 
     m_program->bind();
-    for (int i = 0; i < 3; i++) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, m_textures[i]);
-    }
-    m_program->setUniformValue("transform", vertexTransform());
-    m_program->setUniformValue("colorMatrix", m_colorMatrix);
-    m_program->setUniformValue("sampleScale", m_sampleScale);
-    m_program->setUniformValue("semiPlanar", static_cast<GLint>(m_semiPlanar ? 1 : 0));
-
     m_vbo.bind();
     m_program->enableAttributeArray("position");
     m_program->enableAttributeArray("texCoord");
     m_program->setAttributeBuffer("position", GL_FLOAT, 0, 2, 4 * sizeof(float));
     m_program->setAttributeBuffer("texCoord", GL_FLOAT, 2 * sizeof(float), 2, 4 * sizeof(float));
 
-    // A zoomed picture stays within the video's letterboxed area.
+    // A zoomed picture stays within the video's letterboxed area. GL counts
+    // device pixels from the bottom left.
     const QSizeF scale = videoScale();
     const double dpr = devicePixelRatioF();
-    const int w = static_cast<int>(std::lround(width() * scale.width() * dpr));
-    const int h = static_cast<int>(std::lround(height() * scale.height() * dpr));
+    const int fw = static_cast<int>(std::lround(width() * dpr));
+    const int fh = static_cast<int>(std::lround(height() * dpr));
+    const int w  = static_cast<int>(std::lround(width() * scale.width() * dpr));
+    const int h  = static_cast<int>(std::lround(height() * scale.height() * dpr));
+    const QRect area((fw - w) / 2, (fh - h) / 2, w, h);
+
     glEnable(GL_SCISSOR_TEST);
-    glScissor((static_cast<int>(std::lround(width() * dpr)) - w) / 2,
-              (static_cast<int>(std::lround(height() * dpr)) - h) / 2, w, h);
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    if (overlayShown() && m_overlay == OverlayMode::Split) {
+        // The first clip before the line, the ghost after it
+        QRect first = area, second = area;
+        if (m_horizontalSplit) {
+            const int top = static_cast<int>(std::lround(m_split * h));
+            first.setTop(area.top() + h - top);
+            second.setHeight(h - top);
+        } else {
+            const int left = static_cast<int>(std::lround(m_split * w));
+            first.setWidth(left);
+            second.setLeft(area.left() + left);
+        }
+        drawLayer(m_main, first, 1.0f);
+        drawLayer(m_ghost, second, 1.0f);
+    } else {
+        drawLayer(m_main, area, 1.0f);
+        if (overlayShown()) {
+            // Keep the destination alpha opaque, or the window would show
+            // through the widget.
+            glEnable(GL_BLEND);
+            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+            drawLayer(m_ghost, area, static_cast<float>(m_split));
+            glDisable(GL_BLEND);
+        }
+    }
     glDisable(GL_SCISSOR_TEST);
 
     m_program->disableAttributeArray("position");
@@ -508,17 +617,98 @@ void VideoRenderer::paintGL() {
     m_program->release();
     glActiveTexture(GL_TEXTURE0);
 
-    if (!m_drawing && (!m_annotations || m_annotations->items().isEmpty())) return;
+    const bool annotations = m_drawing || (m_annotations && !m_annotations->items().isEmpty());
+    if (!annotations && !overlayShown()) return;
     QPainter p(this);
-    const QSizeF area = videoArea();
-    paintAnnotations(p, videoToWidget(),
-                     QRectF(QPointF((width() - area.width()) / 2, (height() - area.height()) / 2), area), true);
+    if (annotations) paintAnnotations(p, videoToWidget(), videoRect(), true);
+    if (overlayShown()) paintSplitLine(p);
+}
+
+// Expects the program, quad and scissor test set up by paintGL().
+void VideoRenderer::drawLayer(const Layer& layer, const QRect& scissor, float opacity) {
+    if (scissor.isEmpty()) return;
+    for (int i = 0; i < 3; i++) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, layer.textures[i]);
+    }
+    m_program->setUniformValue("transform", vertexTransform(layer));
+    m_program->setUniformValue("colorMatrix", layer.colorMatrix);
+    m_program->setUniformValue("sampleScale", layer.sampleScale);
+    m_program->setUniformValue("semiPlanar", static_cast<GLint>(layer.semiPlanar ? 1 : 0));
+    m_program->setUniformValue("opacity", opacity);
+    glScissor(scissor.x(), scissor.y(), scissor.width(), scissor.height());
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+}
+
+// A white line across the video with a round handle in its middle, and while
+// blending is dragged, the mix beside the handle
+void VideoRenderer::paintSplitLine(QPainter& p) const {
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setClipping(false);
+    const QRectF area = videoRect();
+    QLineF line;
+    if (m_horizontalSplit) {
+        const double y = area.top() + m_split * area.height();
+        line = QLineF(area.left(), y, area.right(), y);
+    } else {
+        const double x = area.left() + m_split * area.width();
+        line = QLineF(x, area.top(), x, area.bottom());
+    }
+    const QPointF handle = line.center();
+    const bool active = m_splitDragging || m_splitHovered;
+
+    // A soft shadow keeps the line visible on bright footage.
+    p.setPen(QPen(QColor(0, 0, 0, 90), 4.0, Qt::SolidLine, Qt::FlatCap));
+    p.drawLine(line);
+    p.setPen(QPen(QColor(255, 255, 255, active ? 255 : 220), 1.5, Qt::SolidLine, Qt::FlatCap));
+    p.drawLine(line);
+
+    p.setPen(QPen(Qt::white, 1.5));
+    p.setBrush(QColor(0, 0, 0, active ? 200 : 150));
+    p.drawEllipse(handle, kSplitHandleRadius, kSplitHandleRadius);
+    // Two small arrows: which way the handle moves
+    p.setPen(Qt::NoPen);
+    p.setBrush(Qt::white);
+    for (int side : {-1, 1}) {
+        QPolygonF arrow({QPointF(side * 7.0, 0.0), QPointF(side * 3.0, -3.5), QPointF(side * 3.0, 3.5)});
+        if (m_horizontalSplit) arrow = QTransform().rotate(90).map(arrow);
+        p.drawPolygon(arrow.translated(handle));
+    }
+
+    if (m_overlay == OverlayMode::Blend && m_splitDragging) {
+        const int ghost = static_cast<int>(std::lround(m_split * 100.0));
+        const QString text = QString("%1 % | %2 %").arg(100 - ghost).arg(ghost);
+        const QSizeF box = labelSize(p, text);
+        QRectF rect(handle + QPointF(kSplitHandleRadius + 8.0, -box.height() / 2), box);
+        if (rect.right() > area.right()) rect.moveRight(handle.x() - kSplitHandleRadius - 8.0);
+        paintLabel(p, rect, Qt::white, text);
+    }
 }
 
 QImage VideoRenderer::renderImage(const FramePtr& frame) const {
     QImage image = frameToImage(frame.get());
     if (image.isNull()) return {};
-    if (m_rotation != 0) image = image.transformed(QTransform().rotate(m_rotation));
+    if (m_main.rotation != 0) image = image.transformed(QTransform().rotate(m_main.rotation));
+    if (overlayShown()) {
+        // The ghost as on screen, scaled to this frame (the clips are expected
+        // to come from the same camera)
+        QImage ghost = frameToImage(m_ghost.frame.get());
+        if (!ghost.isNull()) {
+            if (m_ghost.rotation != 0) ghost = ghost.transformed(QTransform().rotate(m_ghost.rotation));
+            ghost = ghost.scaled(image.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            QPainter p(&image);
+            const QRectF target(QPointF((image.width() - ghost.width()) / 2.0, (image.height() - ghost.height()) / 2.0),
+                                ghost.size());
+            if (m_overlay == OverlayMode::Blend) {
+                p.setOpacity(m_split);
+            } else if (m_horizontalSplit) {
+                p.setClipRect(QRectF(0, m_split * image.height(), image.width(), image.height()));
+            } else {
+                p.setClipRect(QRectF(m_split * image.width(), 0, image.width(), image.height()));
+            }
+            p.drawImage(target, ghost);
+        }
+    }
     if (!m_annotations || m_annotations->items().isEmpty()) return image;
 
     // Lay the drawings out as on screen without zoom, then scale that up to

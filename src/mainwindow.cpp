@@ -43,6 +43,10 @@ namespace {
 // More tiles get too small to be useful, and each one runs its own decoder.
 constexpr int kMaxClips = 6;
 
+// Comparison bar button ids of the overlay modes, next to the arrangements
+constexpr int kBlendId = 10;
+constexpr int kSplitId = 11;
+
 const char* const kRepoUrl = "https://github.com/BorisBrock/Replayer";
 const char* const kHelpUrl = "https://github.com/BorisBrock/Replayer/blob/main/docs/HELP.md";
 
@@ -173,8 +177,10 @@ QWidget* MainWindow::createCompareBar() {
     layout->addWidget(m_syncSlider, 1);
     layout->addSpacing(12);
 
-    // Tile arrangement (remembered across sessions)
+    // Tile arrangement (remembered across sessions), or one of the overlay
+    // modes for exactly two clips
     auto* group = new QButtonGroup(bar);
+    m_arrangementGroup = group;
     const struct {
         ClipGrid::Arrangement arrangement;
         Theme::Icon icon;
@@ -192,9 +198,29 @@ QWidget* MainWindow::createCompareBar() {
         group->addButton(button, id);
         button->setChecked(id == saved);
     }
+    layout->addSpacing(8);
+    m_blendButton = addButton(Theme::Icon::GhostBlend,
+                              "Ghost: blend the second clip over the first (G)\n"
+                              "Drag the line to change the mix, double-click it for 50/50");
+    m_splitButton = addButton(Theme::Icon::GhostSplit,
+                              "Ghost: first clip before the line, second after it (G)\n"
+                              "Drag the line to move it; click here again to turn it");
+    for (auto [button, id] : {std::pair{m_blendButton, kBlendId}, std::pair{m_splitButton, kSplitId}}) {
+        button->setCheckable(true);
+        group->addButton(button, id);
+    }
     connect(group, &QButtonGroup::idClicked, this, [this](int id) {
-        m_grid->setArrangement(static_cast<ClipGrid::Arrangement>(id));
-        QSettings().setValue("compare/arrangement", id);
+        if (id == kBlendId) {
+            setOverlay(OverlayMode::Blend);
+        } else if (id == kSplitId) {
+            // Clicked again: the line turns between upright and across.
+            if (m_overlay == OverlayMode::Split) m_horizontalSplit = !m_horizontalSplit;
+            setOverlay(OverlayMode::Split);
+        } else {
+            setOverlay(OverlayMode::None);
+            m_grid->setArrangement(static_cast<ClipGrid::Arrangement>(id));
+            QSettings().setValue("compare/arrangement", id);
+        }
     });
     m_grid->setArrangement(static_cast<ClipGrid::Arrangement>(saved));
     return bar;
@@ -273,6 +299,14 @@ void MainWindow::createActions() {
     addAction(viewMenu, "Zoom &In", {Qt::Key_Plus, Qt::Key_Equal}, zoomBy(1.25));
     addAction(viewMenu, "Zoom &Out", {Qt::Key_Minus}, zoomBy(1.0 / 1.25));
     addAction(viewMenu, "&Reset Zoom", {Qt::Key_0}, [this] { setZoom(ViewZoom()); });
+    viewMenu->addSeparator();
+    // Two clips: tiles -> blend -> split -> tiles
+    addAction(viewMenu, "&Ghost Overlay", {Qt::Key_G}, [this] {
+        if (m_views.size() != 2) return;
+        setOverlay(m_overlay == OverlayMode::None    ? OverlayMode::Blend
+                   : m_overlay == OverlayMode::Blend ? OverlayMode::Split
+                                                     : OverlayMode::None);
+    });
     viewMenu->addSeparator();
     createUnitsMenu(viewMenu->addMenu("&Units"));
     createAccentMenu(viewMenu->addMenu("&Accent Color"));
@@ -454,6 +488,7 @@ void MainWindow::showClips(QStringList paths, const QString& current) {
     m_grid->setViews(m_views);
     m_compareBar->setVisible(compare);
     m_compareLabel->setText(QString("Comparing %1 clips").arg(m_views.size()));
+    applyOverlay();
 
     setCurrentClip(paths.contains(current) ? current : paths.first());
     setWindowTitle(compare ? QString("Comparing %1 clips - %2").arg(m_views.size()).arg(appTitle())
@@ -548,6 +583,31 @@ void MainWindow::setPlayIntent(bool play) {
     m_playIntent = play;
     // Started back to back, so the clips stay in step.
     forEachController([play](PlayerController* c) { play ? c->play() : c->pause(); });
+}
+
+void MainWindow::setOverlay(OverlayMode mode) {
+    m_overlay = mode;
+    applyOverlay();
+}
+
+void MainWindow::applyOverlay() {
+    const bool pair = m_views.size() == 2;
+    const OverlayMode mode = pair ? m_overlay : OverlayMode::None;
+    const bool on = mode != OverlayMode::None;
+    for (qsizetype i = 0; i < m_views.size(); i++) {
+        m_views[i]->setGhost(on && i == 0 ? m_views[1] : nullptr, mode, m_horizontalSplit);
+        m_views[i]->setVideoHidden(on && i == 1);
+    }
+    m_grid->setOverlay(on);
+
+    m_blendButton->setVisible(pair);
+    m_splitButton->setVisible(pair);
+    m_splitButton->setIcon(Theme::icon(m_horizontalSplit ? Theme::Icon::GhostSplitHorizontal
+                                                         : Theme::Icon::GhostSplit));
+    const int id = mode == OverlayMode::Blend ? kBlendId
+                 : mode == OverlayMode::Split ? kSplitId
+                                              : static_cast<int>(m_grid->arrangement());
+    if (QAbstractButton* button = m_arrangementGroup->button(id)) button->setChecked(true);
 }
 
 void MainWindow::setZoom(ViewZoom zoom) {

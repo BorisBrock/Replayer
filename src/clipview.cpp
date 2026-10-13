@@ -15,6 +15,7 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QRegularExpression>
+#include <QSizePolicy>
 #include <QStyle>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -135,6 +136,31 @@ void ClipView::setAnnotations(AnnotationDoc* doc) {
 
 void ClipView::setDrawStyle(const DrawStyle& style) {
     m_videoRenderer->setDrawStyle(style);
+}
+
+void ClipView::setGhost(ClipView* ghost, OverlayMode mode, bool horizontalSplit) {
+    if (ghost != m_ghost) {
+        disconnect(m_ghostConnection);
+        m_ghost = ghost;
+        if (ghost) {
+            // The ghost's own tile has set the rotation by the time this runs
+            // (it connected first).
+            m_ghostConnection = connect(ghost->m_controller, &PlayerController::frameReady, this,
+                                        [this, ghost](const FramePtr& frame) {
+                                            m_videoRenderer->setGhostFrame(frame, ghost->m_videoRenderer->rotation());
+                                        });
+            m_videoRenderer->setGhostFrame(ghost->currentFrame(), ghost->m_videoRenderer->rotation());
+        } else {
+            m_videoRenderer->setGhostFrame(nullptr, 0);
+        }
+    }
+    m_videoRenderer->setOverlayMode(ghost ? mode : OverlayMode::None, horizontalSplit);
+}
+
+void ClipView::setVideoHidden(bool hidden) {
+    m_videoRenderer->setVisible(!hidden);
+    // Without the video, the tile takes no more height than its controls.
+    setSizePolicy(QSizePolicy::Preferred, hidden ? QSizePolicy::Maximum : QSizePolicy::Preferred);
 }
 
 void ClipView::addAnnotation(Annotation annotation) {

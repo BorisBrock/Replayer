@@ -2,8 +2,10 @@
 #define CLIPVIEW_H
 
 #include <QFrame>
+#include <QPointer>
 
 #include "annotations.h"
+#include "overlay.h"
 #include "videoframe.h"
 #include "viewzoom.h"
 
@@ -38,6 +40,12 @@ public:
     // The drawings of the clip shown (not owned), and how new ones are drawn.
     void setAnnotations(AnnotationDoc* doc);
     void setDrawStyle(const DrawStyle& style);
+    // Shows ghost's video on top of this clip's, as mode says; nullptr ends
+    // it. See OverlayMode.
+    void setGhost(ClipView* ghost, OverlayMode mode, bool horizontalSplit);
+    // Leaves just the title and controls, for a clip shown as another
+    // tile's ghost. Its player keeps running.
+    void setVideoHidden(bool hidden);
 
 signals:
     void activated();          // clicked anywhere on the tile
@@ -67,6 +75,8 @@ private:
     QString           m_path;
     AnnotationDoc*    m_annotations = nullptr;
     int               m_pendingRotation = -1;
+    QPointer<ClipView>      m_ghost;
+    QMetaObject::Connection m_ghostConnection;
 };
 
 #endif

@@ -89,6 +89,7 @@ add_executable(replayer WIN32 MACOSX_BUNDLE
     src/infopanel.cpp       src/infopanel.h
     src/zoomnavigator.cpp   src/zoomnavigator.h
     src/viewzoom.h
+    src/overlay.h
     src/annotations.cpp     src/annotations.h
     src/theme.cpp           src/theme.h
     src/timeformat.h

@@ -30,13 +30,19 @@ void ClipGrid::setArrangement(Arrangement arrangement) {
     relayout(true);
 }
 
+void ClipGrid::setOverlay(bool overlay) {
+    if (overlay == m_overlay) return;
+    m_overlay = overlay;
+    relayout(true);
+}
+
 void ClipGrid::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
     relayout(false);
 }
 
 int ClipGrid::columnsFor(int count) const {
-    if (count <= 1) return 1;
+    if (count <= 1 || m_overlay) return 1;
     switch (m_arrangement) {
     case Arrangement::SideBySide: return count;
     case Arrangement::Stacked:    return 1;
@@ -82,6 +88,6 @@ void ClipGrid::relayout(bool force) {
         m_views[i]->show();
     }
     const int rows = (static_cast<int>(m_views.size()) + columns - 1) / std::max(1, columns);
-    for (int r = 0; r < rows; r++) m_layout->setRowStretch(r, 1);
+    for (int r = 0; r < rows; r++) m_layout->setRowStretch(r, m_overlay && r > 0 ? 0 : 1);
     for (int c = 0; c < columns; c++) m_layout->setColumnStretch(c, 1);
 }

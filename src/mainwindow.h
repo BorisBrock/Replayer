@@ -7,6 +7,7 @@
 #include <functional>
 #include <utility>
 
+#include "overlay.h"
 #include "viewzoom.h"
 
 class AnnotationDoc;
@@ -16,6 +17,7 @@ class FileBrowser;
 class InfoPanel;
 class PlayerController;
 class QLabel;
+class QButtonGroup;
 class QMenu;
 class QScrollArea;
 class QSlider;
@@ -76,6 +78,12 @@ private:
     void syncSeek(int ms);
     void updateSyncSlider();
 
+    // With exactly two clips, the second can be shown over the first (see
+    // OverlayMode) instead of beside it. The mode is kept while other
+    // numbers of clips are shown, and comes back with the next pair.
+    void setOverlay(OverlayMode mode);
+    void applyOverlay();
+
     // Zoom is shared by all clips (they usually come from one static camera).
     void setZoom(ViewZoom zoom);
     void updateThumbnail();
@@ -94,6 +102,9 @@ private:
     QLabel*      m_compareLabel;
     QToolButton* m_playAllButton;
     QSlider*     m_syncSlider;
+    QButtonGroup* m_arrangementGroup;
+    QToolButton* m_blendButton;
+    QToolButton* m_splitButton;
     QAction*     m_loopAction = nullptr;
 
     // Each clip's offset to the current clip, captured when a seek with the
@@ -110,6 +121,8 @@ private:
     QHash<QString, AnnotationDoc*> m_annotations;
     bool                   m_playIntent = true; // survives clip ends and switches
     double                 m_speed      = 1.0;
+    OverlayMode            m_overlay    = OverlayMode::None;
+    bool                   m_horizontalSplit = false;
     ViewZoom               m_zoom;
     QTimer*                m_thumbnailTimer = nullptr;
 };

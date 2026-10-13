@@ -196,6 +196,26 @@ QString styleSheet(const AccentColors& a) {
     return qss;
 }
 
+// A little ghost for the overlay modes: round head, wavy hem, two eyes
+// (holes, by the odd-even fill)
+QPainterPath ghostPath(bool withEyes) {
+    QPainterPath ghost;
+    ghost.moveTo(4.5, 20.5);
+    ghost.lineTo(4.5, 11);
+    ghost.arcTo(QRectF(4.5, 3.5, 15, 15), 180, -180);
+    ghost.lineTo(19.5, 20.5);
+    for (int i = 0; i < 3; i++) {
+        const double x = 19.5 - 5.0 * i;
+        ghost.quadTo(x - 2.5, 16.5, x - 5.0, 20.5);
+    }
+    ghost.closeSubpath();
+    if (withEyes) {
+        ghost.addEllipse(QPointF(9.5, 11), 1.5, 1.8);
+        ghost.addEllipse(QPointF(14.5, 11), 1.5, 1.8);
+    }
+    return ghost;
+}
+
 // Draws one icon on a 24x24 design grid.
 void paintIcon(QPainter& p, Theme::Icon which) {
     QPainterPath path;
@@ -355,6 +375,50 @@ void paintIcon(QPainter& p, Theme::Icon which) {
         font.setBold(true);
         path.addText(0, 0, font, which == Theme::Icon::MarkA ? "A" : "B");
         path.translate(QPointF(12, 12) - path.boundingRect().center());
+        break;
+    }
+    case Theme::Icon::GhostBlend: {
+        // Half solid, half a dotted outline: the two clips mixed
+        const QColor color = p.brush().color();
+        p.save();
+        p.setClipRect(QRectF(0, 0, 12, 24));
+        p.setPen(Qt::NoPen);
+        p.drawPath(ghostPath(true));
+        p.restore();
+        p.save();
+        p.setClipRect(QRectF(12, 0, 12, 24));
+        QPen dots(color, 1.7, Qt::CustomDashLine, Qt::RoundCap);
+        dots.setDashPattern({0.01, 1.9});
+        p.strokePath(ghostPath(false), dots);
+        p.setPen(Qt::NoPen);
+        p.drawEllipse(QPointF(14.5, 11), 1.1, 1.3);
+        p.restore();
+        break;
+    }
+    case Theme::Icon::GhostSplit:
+    case Theme::Icon::GhostSplitHorizontal: {
+        // The ghost cut in two, with the split line running through the gap
+        const bool horizontal = which == Theme::Icon::GhostSplitHorizontal;
+        const QRectF gap = horizontal ? QRectF(0, 14.3, 24, 2.6) : QRectF(10.7, 0, 2.6, 24);
+        QPainterPath body;
+        body.addRect(QRectF(0, 0, 24, 24));
+        body = body.subtracted([&] {
+            QPainterPath g;
+            g.addRect(gap);
+            return g;
+        }());
+        p.save();
+        p.setClipPath(body);
+        p.setPen(Qt::NoPen);
+        p.drawPath(ghostPath(true));
+        p.restore();
+        QPainterPath split;
+        if (horizontal) {
+            split.moveTo(1.5, gap.center().y()); split.lineTo(22.5, gap.center().y());
+        } else {
+            split.moveTo(12, 1.5); split.lineTo(12, 22.5);
+        }
+        p.strokePath(split, QPen(p.brush().color(), 1.1, Qt::SolidLine, Qt::RoundCap));
         break;
     }
     }
