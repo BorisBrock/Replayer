@@ -131,12 +131,56 @@ easy-to-grab controls. Pick the accent colour you like best.
 ### 💻 Cross platform
 
 Runs on **Windows** and **Linux**. On Windows, just unzip and start – no
-installation needed. On Linux, there is a single AppImage.
+installation needed. On Linux, there is a single AppImage, and Arch users
+get it from the AUR.
 
 ### 💚 Free and open source
 
 No ads. No telemetry. No subscription. No account. Replayer is free and
 open source under the GNU GPL v3 – forever.
+
+---
+
+## 📦 Installation
+
+Download the latest version from the
+**[releases page](https://github.com/BorisBrock/Replayer/releases/latest)**.
+
+### Windows
+
+Download `replayer-<version>-win64.zip`, unzip it anywhere and start
+`replayer.exe`. Nothing else needs to be installed.
+
+### Linux (AppImage)
+
+Download `replayer-<version>-x86_64.AppImage`, make it executable and run it:
+
+```bash
+chmod +x replayer-*-x86_64.AppImage
+./replayer-*-x86_64.AppImage
+```
+
+It runs on most distributions from Ubuntu 24.04 on.
+
+### Arch Linux (AUR)
+
+Install [`replayer`](https://aur.archlinux.org/packages/replayer) (latest
+release) or [`replayer-git`](https://aur.archlinux.org/packages/replayer-git)
+(latest commit) with an AUR helper such as paru or yay:
+
+```bash
+paru -S replayer
+```
+
+Or build it by hand:
+
+```bash
+git clone https://aur.archlinux.org/replayer.git
+cd replayer
+makepkg -si
+```
+
+To build Replayer yourself, see **Building from source** below.
 
 ---
 
