@@ -52,3 +52,57 @@ jobs:
           generate_release_notes: true
           # 0.x versions and versions like 1.0.0-rc1 are pre-releases
           prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, '-') }}
+
+  aur:
+    name: Update AUR package
+    needs: [version, release]
+    # Stable releases only, the AUR package doesn't track pre-releases
+    if: ${{ !startsWith(github.ref_name, 'v0.') && !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Install tools
+        run: pacman -Syu --noconfirm --needed git openssh
+
+      - uses: actions/checkout@v7
+
+      - name: Install build dependencies
+        run: |
+          source packaging/aur/replayer/PKGBUILD
+          pacman -S --noconfirm --needed "${depends[@]}" "${makedepends[@]}"
+
+      # makepkg refuses to run as root
+      - name: Create build user
+        run: |
+          useradd -m builder
+          chown -R builder: .
+
+      - name: Set up SSH for the AUR
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$AUR_SSH_PRIVATE_KEY" ]]; then
+            echo "::error::Secret AUR_SSH_PRIVATE_KEY is missing, see packaging/aur/README.md"
+            exit 1
+          fi
+          install -d -m 700 -o builder -g builder ~builder/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~builder/.ssh/aur
+          # Pinned host key, SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4 as
+          # published on https://aur.archlinux.org
+          echo 'aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN' > ~builder/.ssh/known_hosts
+          printf 'Host aur.archlinux.org\n  IdentityFile ~/.ssh/aur\n  User aur\n' > ~builder/.ssh/config
+          chmod 600 ~builder/.ssh/*
+          chown -R builder: ~builder/.ssh
+
+      - name: Update and push AUR package
+        run: |
+          su builder -c '
+            set -euo pipefail
+            git config --global user.name "Boris Brock"
+            git config --global user.email "gabrielborisbrock@gmail.com"
+            git clone ssh://aur@aur.archlinux.org/replayer.git "$HOME/aur-replayer"
+            packaging/aur/update-release.sh "$VERSION" "$HOME/aur-replayer"
+            git -C "$HOME/aur-replayer" push origin master
+          '
