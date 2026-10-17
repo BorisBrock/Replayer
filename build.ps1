@@ -18,10 +18,10 @@
 
 .EXAMPLE
     .\build.ps1
-    .\build.ps1 -Clean -QtDir D:\dev\Qt\6.8.3\msvc2022_64 -FFmpegDir D:\dev\ffmpeg
+    .\build.ps1 -Clean -QtDir D:\dev\Qt\6.11.3\msvc2022_64 -FFmpegDir D:\dev\ffmpeg
 #>
 param(
-    [string]$QtDir = $(if ($env:QT_DIR) { $env:QT_DIR } else { 'D:\dev\Qt\6.8.3\msvc2022_64' }),
+    [string]$QtDir = $(if ($env:QT_DIR) { $env:QT_DIR } else { 'D:\dev\Qt\6.11.3\msvc2022_64' }),
     [string]$FFmpegDir = $(if ($env:FFMPEG_DIR) { $env:FFMPEG_DIR } else { 'D:\dev\ffmpeg' }),
     [string]$Version = $env:REPLAYER_VERSION,
     [switch]$Clean

@@ -140,17 +140,11 @@ QString styleSheet(const AccentColors& a) {
         QListWidget::item:hover { background: @surface; }
         QListWidget::item:selected { background: @selection; color: @onSelection; }
 
-        /* Cards in the info panel */
+        /* Collapsible side panel cards: the header above takes the title's place */
         QGroupBox {
             background: @surface; border: none; border-radius: 10px;
-            margin-top: 26px; padding: 14px 12px 12px 12px;
+            margin-top: 0; padding: 14px 12px 12px 12px;
         }
-        QGroupBox::title {
-            subcontrol-origin: margin; subcontrol-position: top left;
-            left: 4px; top: 4px; color: @textMuted; font-weight: 600;
-        }
-        /* Collapsible side panel cards: the header takes the title's place */
-        QGroupBox#SectionBody { margin-top: 0; }
         QToolButton#SectionHeader {
             color: @textMuted; font-weight: 600; padding: 4px 6px 4px 0; margin: 4px 0 2px 0;
         }
@@ -234,7 +228,7 @@ QPainterPath ghostPath(bool withEyes) {
 // Draws one icon on a 24x24 design grid.
 void paintIcon(QPainter& p, Theme::Icon which) {
     QPainterPath path;
-    // Outlines (the drawing tools) instead of filled shapes
+    // Outlines instead of filled shapes, for line-art icons
     auto stroke = [&p](const QPainterPath& outline, double width = 2.0) {
         p.strokePath(outline, QPen(p.brush().color(), width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     };

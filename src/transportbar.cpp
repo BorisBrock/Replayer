@@ -116,7 +116,8 @@ void TransportBar::setPosition(double position) {
         m_positionSlider->setValue(static_cast<int>(position * 1000.0));
     }
 
-    // Tiles are narrow; their clip's duration is shown in the info panel.
+    // Tiles are narrow, so they show the position only; the current clip's
+    // duration is in the info panel.
     m_timeLabel->setText(m_compact ? formatTime(position)
                                    : QString("%1 / %2").arg(formatTime(position), formatTime(m_duration)));
     if (m_fps > 0.0) {

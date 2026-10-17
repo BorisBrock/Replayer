@@ -3,7 +3,8 @@
 
 // How a second clip (the ghost) is shown on top of a clip, for an exact
 // comparison of two takes. A line across the video, dragged by the user,
-// sets the mix: at its left the first clip only, at its right the ghost only.
+// sets the mix: the ghost's opacity when blending, or where the first clip
+// ends and the ghost begins when split (upright, or turned to run across).
 enum class OverlayMode {
     None,
     Blend, // both clips mixed; the line's position sets the ghost's opacity

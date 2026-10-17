@@ -22,7 +22,8 @@ public:
     };
 
     // Default maximum number of decoded frames held in memory at once. A 4K
-    // NV12 frame is ~12 MB, so this caps the queue at ~200 MB.
+    // frame is ~12 MB in NV12 (8-bit) and ~24 MB in P010 (10-bit), so this
+    // caps the queue at ~200 MB, or ~400 MB for 10-bit footage.
     static constexpr int DEFAULT_CAPACITY = 16;
 
     // Changes the maximum; e.g. lowered when several clips play side by side.

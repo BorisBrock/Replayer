@@ -185,7 +185,7 @@ For a full description of every function, see the **[user guide](docs/HELP.md)**
 
 ### Requirements
 
-- Qt 6.2 or newer (Core, Gui, Widgets, OpenGLWidgets)
+- Qt 6.2 or newer (Core, Gui, Widgets, OpenGLWidgets, Svg)
 - FFmpeg 5.1 or newer (libavcodec, libavformat, libavutil, libswscale)
 - CMake 3.21+, pkg-config, a C++17 compiler
 - OpenGL 3.0 (or 2.1 with `ARB_texture_rg`)
@@ -195,7 +195,7 @@ For a full description of every function, see the **[user guide](docs/HELP.md)**
 On Debian/Ubuntu:
 
 ```bash
-sudo apt install build-essential cmake ninja-build pkg-config qt6-base-dev \
+sudo apt install build-essential cmake ninja-build pkg-config qt6-base-dev qt6-svg-dev \
     libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
 cmake -S . -B build -G Ninja
 cmake --build build
@@ -215,7 +215,7 @@ and a shared FFmpeg build with MSVC import libraries, e.g.
 pkg-config, CMake finds FFmpeg through `-DFFMPEG_ROOT=<dir>`.
 
 ```powershell
-.\build.ps1 -QtDir D:\dev\Qt\6.8.3\msvc2022_64 -FFmpegDir D:\dev\ffmpeg
+.\build.ps1 -QtDir D:\dev\Qt\6.11.3\msvc2022_64 -FFmpegDir D:\dev\ffmpeg
 ```
 
 The paths can also be set with `QT_DIR` and `FFMPEG_DIR`. The result is a
