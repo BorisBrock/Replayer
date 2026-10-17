@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  QT_VERSION: 6.11.3
+  QT_VERSION: 6.10.3
   # Shared LGPL build with MSVC import libraries, see build.ps1
   FFMPEG_ARCHIVE: ffmpeg-n9.0-latest-win64-lgpl-shared-9.0
   # Empty outside of releases, then CMakeLists.txt derives it from the tags

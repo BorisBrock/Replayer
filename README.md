@@ -259,7 +259,7 @@ and a shared FFmpeg build with MSVC import libraries, e.g.
 pkg-config, CMake finds FFmpeg through `-DFFMPEG_ROOT=<dir>`.
 
 ```powershell
-.\build.ps1 -QtDir D:\dev\Qt\6.11.3\msvc2022_64 -FFmpegDir D:\dev\ffmpeg
+.\build.ps1 -QtDir D:\dev\Qt\6.10.3\msvc2022_64 -FFmpegDir D:\dev\ffmpeg
 ```
 
 The paths can also be set with `QT_DIR` and `FFMPEG_DIR`. The result is a
