@@ -91,6 +91,13 @@ the runs, skip the walk back up, and every run becomes a clip of its own –
 ready to compare side by side. Or let **Suggest Markers** find the jumps for
 you by detecting the motion in the picture. Your video files stay untouched.
 
+### 🏷️ Mark your best runs, hide the rest
+
+Right-click a clip to give it a color – green for the jump that went really
+well, red for the one that almost ended badly. Clips that show nothing of
+interest can be hidden, so they don't clutter the list; the eye button next to
+the folder name brings them back.
+
 ### 🔍 Zoom in on the action
 
 <p align="center">
@@ -212,7 +219,7 @@ If Replayer helps you land that jump, you can buy me a coffee. Thank you!
 |-------------------------|-------------------------------------|
 | Down / Up (PgDn / PgUp) | Next / previous clip                |
 | Ctrl+click, Shift+click | Select clips to compare             |
-| Right-click a clip      | Split a long recording into runs    |
+| Right-click a clip      | Split, color or hide a clip         |
 | Space                   | Play / pause                        |
 | S                       | Stop (rewind to start)              |
 | L                       | Loop clip on / off                  |

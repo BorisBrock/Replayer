@@ -84,6 +84,7 @@ add_executable(replayer WIN32 MACOSX_BUNDLE
     src/clipview.cpp        src/clipview.h
     src/clipref.h
     src/clipsplits.cpp      src/clipsplits.h
+    src/clipmarks.cpp       src/clipmarks.h
     src/splitdialog.cpp     src/splitdialog.h
     src/markerbar.cpp       src/markerbar.h
     src/motionanalyzer.cpp  src/motionanalyzer.h

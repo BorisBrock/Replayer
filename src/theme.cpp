@@ -172,6 +172,7 @@ QString styleSheet(const AccentColors& a) {
             background: @surface; border: 1px solid @border; border-radius: 8px; padding: 6px;
         }
         QMenu::item { padding: 7px 28px 7px 14px; border-radius: 6px; }
+        QMenu::icon { padding-left: 10px; }
         QMenu::item:checked { background: @selection; color: @onSelection; }
         QMenu::item:selected { background: @accent; color: @onAccent; }
         QMenu::item:disabled { color: @textDisabled; }
@@ -390,6 +391,19 @@ void paintIcon(QPainter& p, Theme::Icon which) {
             s.addEllipse(QPointF(17, 17.5), 3, 3);
             s.moveTo(9, 15.3); s.lineTo(17.5, 4);
             s.moveTo(15, 15.3); s.lineTo(6.5, 4);
+            return s;
+        }(), 1.8);
+        break;
+    case Theme::Icon::Eye:
+    case Theme::Icon::EyeOff:
+        // Almond outline with the iris; struck through when off
+        stroke([which] {
+            QPainterPath s;
+            s.moveTo(3, 12);
+            s.quadTo(12, 3, 21, 12);
+            s.quadTo(12, 21, 3, 12);
+            s.addEllipse(QPointF(12, 12), 3, 3);
+            if (which == Theme::Icon::EyeOff) { s.moveTo(5, 19); s.lineTo(19, 5); }
             return s;
         }(), 1.8);
         break;
