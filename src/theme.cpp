@@ -172,6 +172,7 @@ QString styleSheet(const AccentColors& a) {
             background: @surface; border: 1px solid @border; border-radius: 8px; padding: 6px;
         }
         QMenu::item { padding: 7px 28px 7px 14px; border-radius: 6px; }
+        QMenu::icon { padding-left: 10px; }
         QMenu::item:checked { background: @selection; color: @onSelection; }
         QMenu::item:selected { background: @accent; color: @onAccent; }
         QMenu::item:disabled { color: @textDisabled; }
