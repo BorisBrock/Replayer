@@ -24,9 +24,10 @@ public:
     explicit ClipView(QWidget* parent = nullptr);
     ~ClipView() override;
 
-    // Opens path and resumes at position (seconds; 0 = start).
+    // Opens a clip (a ClipRef key: a file, or a part of one) and resumes at
+    // position (seconds from the clip's start; 0 = start).
     bool open(const QString& path, double position);
-    QString path() const { return m_path; }
+    QString path() const { return m_path; } // the ClipRef key
 
     PlayerController* controller() const { return m_controller; }
     TransportBar* transportBar() const { return m_transportBar; }

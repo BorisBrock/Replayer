@@ -1,11 +1,14 @@
 #include "mainwindow.h"
 #include "annotations.h"
+#include "clipref.h"
+#include "clipsplits.h"
 #include "clipgrid.h"
 #include "clipview.h"
 #include "filebrowser.h"
 #include "infopanel.h"
 #include "jumpsliderstyle.h"
 #include "playercontroller.h"
+#include "splitdialog.h"
 #include "theme.h"
 #include "transportbar.h"
 
@@ -98,6 +101,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     connect(m_fileBrowser, &FileBrowser::openFolderClicked, this, &MainWindow::onOpenFolder);
     connect(m_fileBrowser, &FileBrowser::selectionChanged, this, &MainWindow::onSelectionChanged);
+    connect(m_fileBrowser, &FileBrowser::splitRequested, this, &MainWindow::splitClip);
     connect(m_infoPanel, &InfoPanel::speedMultiplierChanged, this, [this](double speed) {
         m_speed = speed;
         forEachController([speed](PlayerController* c) { c->setSpeedMultiplier(speed); });
@@ -427,7 +431,7 @@ ClipView* MainWindow::createView() {
         if (view->path() == m_currentClip) setCurrentClip(m_currentClip);
     });
     connect(view, &ClipView::errorOccurred, this, [this, view](const QString& error) {
-        statusBar()->showMessage(QString("%1: %2").arg(QFileInfo(view->path()).fileName(), error), 8000);
+        statusBar()->showMessage(QString("%1: %2").arg(ClipRef::fromKey(view->path()).displayName(), error), 8000);
     });
     connect(view->transportBar(), &TransportBar::loopToggled, m_loopAction, &QAction::setChecked);
 
@@ -504,7 +508,7 @@ void MainWindow::showClips(QStringList paths, const QString& current) {
 
     setCurrentClip(paths.contains(current) ? current : paths.first());
     setWindowTitle(compare ? QString("Comparing %1 clips - %2").arg(m_views.size()).arg(appTitle())
-                           : QString("%1 - %2").arg(QFileInfo(paths.first()).fileName(), appTitle()));
+                           : QString("%1 - %2").arg(ClipRef::fromKey(paths.first()).displayName(), appTitle()));
     updatePlayAllButton();
     saveSession();
 }
@@ -518,11 +522,27 @@ void MainWindow::setCurrentClip(const QString& path) {
         view->setCurrent(m_views.size() > 1 && view->path() == path);
         if (view->path() != path) continue;
         if (view->controller()->isOpen())
-            m_infoPanel->setVideoInfo(QFileInfo(path).fileName(), view->controller()->videoInfo());
+            m_infoPanel->setVideoInfo(ClipRef::fromKey(path).displayName(), view->controller()->videoInfo());
         else
             m_infoPanel->clearVideoInfo();
     }
     updateSyncSlider();
+}
+
+// Edits the parts of a long recording, then shows the new parts side by side.
+void MainWindow::splitClip(const QString& path) {
+    setPlayIntent(false);
+    SplitDialog dialog(path, ClipSplits::parts(path), this);
+    if (dialog.exec() != QDialog::Accepted) return;
+
+    const QList<ClipRef> parts = dialog.parts();
+    ClipSplits::setParts(path, parts);
+    m_fileBrowser->refresh();
+    QStringList clips;
+    for (const ClipRef& part : parts) clips << part.key();
+    if (clips.isEmpty()) clips << path;
+    m_fileBrowser->selectFiles(clips.mid(0, kMaxClips), clips.first());
+    onSelectionChanged();
 }
 
 void MainWindow::rememberPosition(ClipView* view) {
@@ -548,8 +568,7 @@ void MainWindow::restoreSession() {
     m_fileBrowser->setFolder(folder);
     QStringList clips;
     for (const QString& clip : settings.value("session/clips").toStringList()) {
-        if (QFileInfo(clip).isFile() && QFileInfo(clip).absolutePath() == m_fileBrowser->folder())
-            clips << clip;
+        if (m_fileBrowser->contains(clip)) clips << clip; // e.g. not a part split differently since
     }
     if (clips.isEmpty()) {
         m_fileBrowser->selectNext(); // first clip

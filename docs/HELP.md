@@ -7,6 +7,7 @@ overview of what Replayer can do, see the [README](../README.md).
 - [Opening clips](#opening-clips)
 - [Playing a clip](#playing-a-clip)
 - [Slow motion](#slow-motion)
+- [Splitting a long recording](#splitting-a-long-recording)
 - [Comparing clips](#comparing-clips)
 - [Zoom and pan](#zoom-and-pan)
 - [Drawing](#drawing)
@@ -128,6 +129,40 @@ factor 8.0x shows 30 frames per second – every frame, smooth to the eye.
 
 The slow-motion factor applies to all clips, so compared clips always run at
 the same speed.
+
+---
+
+## Splitting a long recording
+
+Without a remote for the camera, it is easiest to leave it recording while
+you do several jumps in a row. To compare those jumps, split the recording
+into parts: each part then works like a clip of its own.
+
+1. **Right-click the recording** in the clip list and choose **Split Clip...**.
+2. **Set a marker between each jump:** play or step to the frame and press
+   **M** (or click **Add Marker**). Markers sit on the timeline below the
+   video and cut it into numbered parts.
+3. **Adjust:** drag a marker to move it (the video follows, so you see the
+   exact frame), select one and press **Delete** to remove it, or
+   right-click the timeline for the same commands.
+4. **Skip what you don't need**, e.g. the walk back up: double-click that
+   part. Skipped parts are hatched and don't become clips.
+5. Click **Apply**. The parts appear indented below the recording, already
+   selected for comparing.
+
+**Suggest Markers** finds the jumps for you: it looks for motion in the
+picture and suggests a part around each burst of it, with a little lead-in,
+skipping the quiet stretches in between. A curve on the timeline shows the
+motion it found. This works best with the camera on a tripod; always check
+the suggestions before applying. Analysing takes a few seconds for every
+minute of video.
+
+- To change the parts later, right-click the recording (or one of its parts)
+  and choose **Edit Split...**; **Remove Split** turns it back into one clip.
+- Splits are remembered by file name and size, so they stay when you copy
+  the folder, e.g. from the camera's memory card to your computer. The video
+  file itself is never changed.
+- Each part keeps its own position and drawings, like any other clip.
 
 ---
 
@@ -398,6 +433,9 @@ When comparing clips, the playback keys act on all of them at once.
 |--------------------|--------------------------------|----------------------------------------|
 | Clip list          | Click                          | Play that clip                         |
 | Clip list          | Ctrl+click, Shift+click        | Select clips to compare                |
+| Clip list          | Right-click                    | Split a recording into parts           |
+| Split timeline     | Click, drag a marker           | Seek, move the marker                  |
+| Split timeline     | Double-click a part            | Keep or skip that part                 |
 | Video              | Mouse wheel                    | Zoom in / out at the pointer           |
 | Video              | Drag (left button)             | Pan when zoomed in (no tool picked)    |
 | Video              | Drag (middle button)           | Pan when zoomed in (any time)          |

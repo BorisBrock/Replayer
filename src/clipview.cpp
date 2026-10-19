@@ -1,4 +1,5 @@
 #include "clipview.h"
+#include "clipref.h"
 #include "playercontroller.h"
 #include "theme.h"
 #include "timeformat.h"
@@ -92,9 +93,10 @@ ClipView::~ClipView() = default;
 
 bool ClipView::open(const QString& path, double position) {
     m_path = path;
-    m_titleLabel->setText(QFileInfo(path).fileName());
-    m_titleLabel->setToolTip(path);
-    if (!m_controller->openFile(path)) {
+    const ClipRef clip = ClipRef::fromKey(path);
+    m_titleLabel->setText(clip.displayName());
+    m_titleLabel->setToolTip(QDir::toNativeSeparators(clip.path));
+    if (!m_controller->openFile(clip.path, clip.start, clip.end)) {
         m_videoRenderer->clearFrame();
         m_transportBar->clear();
         return false;
@@ -227,9 +229,11 @@ void ClipView::exportFrame(const FramePtr& frame, double position) {
         emit errorOccurred("Could not convert the frame");
         return;
     }
-    // e.g. "clip_00-12.345.png" next to the clip
-    const QFileInfo clip(m_path);
-    const QString name = QString("%1_%2.png").arg(clip.completeBaseName(), formatTime(position).replace(':', '-'));
+    // e.g. "clip_00-12.345.png" next to the clip, with the time in the file
+    const ClipRef ref = ClipRef::fromKey(m_path);
+    const QFileInfo clip(ref.path);
+    const QString name = QString("%1_%2.png").arg(clip.completeBaseName(),
+                                                  formatTime(ref.start + position).replace(':', '-'));
     const QString file = QFileDialog::getSaveFileName(this, "Export Frame", clip.dir().filePath(name),
                                                       "PNG Images (*.png)");
     if (file.isEmpty()) return;

@@ -1,4 +1,5 @@
 #include "filebrowser.h"
+#include "clipsplits.h"
 
 #include <QApplication>
 #include <QCollator>
@@ -6,18 +7,20 @@
 #include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QLabel>
-#include <QListWidget>
+#include <QMenu>
 #include <QPainter>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QStyledItemDelegate>
 #include <QTimer>
+#include <QTreeWidget>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <cmath>
 
 #include "decoder.h"
 #include "theme.h"
+#include "timeformat.h"
 
 namespace {
 
@@ -26,8 +29,9 @@ const QStringList kVideoSuffixes = {
     "mp4", "m4v", "mov", "mkv", "avi", "ts", "mts", "m2ts", "webm", "lrv", "360",
 };
 
-constexpr int kPathRole     = Qt::UserRole;
+constexpr int kPathRole     = Qt::UserRole;     // ClipRef key
 constexpr int kDurationRole = Qt::UserRole + 1; // seconds; -1: unreadable, unset: pending
+constexpr int kSplitRole    = Qt::UserRole + 2; // a file that has parts
 
 // Cameras number their clips in recording order, so sorting by name lists
 // them oldest first. GoPro puts the chapter of a split recording before the
@@ -57,7 +61,7 @@ QString durationText(const QVariant& value) {
         .arg(total % 60, 2, 10, QChar('0'));
 }
 
-// Clip icon, file name and duration. The name gets whatever width is left
+// Clip icon (scissors for a split file), file name and duration. The name gets whatever width is left
 // and is shortened in the middle, so the extension stays visible.
 class ClipDelegate : public QStyledItemDelegate {
 public:
@@ -67,6 +71,9 @@ public:
         QStyleOptionViewItem opt = option;
         initStyleOption(&opt, index);
         const QString name = opt.text;
+        // Parts sit indented below their file (the tree itself doesn't
+        // indent, so the selection doesn't spill into the gap).
+        if (index.parent().isValid()) opt.rect.setLeft(opt.rect.left() + kIndent);
 
         // The style (sheet) draws just the hover and selection background.
         opt.text.clear();
@@ -81,7 +88,8 @@ public:
 
         QRect r = opt.rect.adjusted(kPadding, 0, -kPadding, 0);
         const QRectF iconRect(r.left(), r.top() + (r.height() - kIconSize) / 2.0, kIconSize, kIconSize);
-        Theme::drawIcon(*p, Theme::Icon::Clip, iconRect, muted);
+        const bool split = index.data(kSplitRole).toBool();
+        Theme::drawIcon(*p, split ? Theme::Icon::Cut : Theme::Icon::Clip, iconRect, muted);
         r.setLeft(r.left() + kIconSize + kGap);
 
         // Fixed column width, so the names line up
@@ -107,9 +115,10 @@ public:
     }
 
 private:
-    static constexpr int kPadding  = 10; // as QListWidget::item in the style sheet
+    static constexpr int kPadding  = 10; // as QTreeWidget#ClipList::item in the style sheet
     static constexpr int kIconSize = 16;
     static constexpr int kGap      = 8;
+    static constexpr int kIndent   = 16;
 };
 
 } // namespace
@@ -132,14 +141,22 @@ FileBrowser::FileBrowser(QWidget* parent) : QWidget(parent) {
     m_folderLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(m_folderLabel);
 
-    m_list = new QListWidget(this);
+    m_list = new QTreeWidget(this);
+    m_list->setObjectName("ClipList");
+    m_list->setHeaderHidden(true);
+    m_list->setRootIsDecorated(false); // parts are always shown, just indented
+    m_list->setItemsExpandable(false);
+    m_list->setIndentation(0); // see ClipDelegate
     m_list->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    m_list->setUniformItemSizes(true);
+    m_list->setUniformRowHeights(true);
     m_list->setItemDelegate(new ClipDelegate(m_list));
     m_list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_list->setToolTip("Ctrl+click or Shift+click to compare several clips");
-    connect(m_list, &QListWidget::itemSelectionChanged, this, &FileBrowser::scheduleSelectionChanged);
-    connect(m_list, &QListWidget::currentItemChanged, this, &FileBrowser::scheduleSelectionChanged);
+    m_list->setToolTip("Ctrl+click or Shift+click to compare several clips.\n"
+                       "Right-click a long recording to split it into parts.");
+    m_list->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_list, &QTreeWidget::customContextMenuRequested, this, &FileBrowser::showContextMenu);
+    connect(m_list, &QTreeWidget::itemSelectionChanged, this, &FileBrowser::scheduleSelectionChanged);
+    connect(m_list, &QTreeWidget::currentItemChanged, this, &FileBrowser::scheduleSelectionChanged);
     layout->addWidget(m_list, 1);
 
     m_watcher = new QFileSystemWatcher(this);
@@ -205,26 +222,42 @@ void FileBrowser::refresh() {
     const QSignalBlocker blocker(m_list);
     m_list->clear();
     for (const QString& name : names) {
-        auto* item = new QListWidgetItem(name, m_list);
-        item->setData(kPathRole, dir.absoluteFilePath(name));
-        item->setToolTip(QDir::toNativeSeparators(dir.absoluteFilePath(name)));
-        updateDuration(m_list->count() - 1);
+        const QString path = dir.absoluteFilePath(name);
+        auto* item = new QTreeWidgetItem(m_list, {name});
+        item->setData(0, kPathRole, path);
+        item->setToolTip(0, QDir::toNativeSeparators(path));
+        updateDuration(item);
+
+        const QList<ClipRef> parts = ClipSplits::parts(path);
+        item->setData(0, kSplitRole, !parts.isEmpty());
+        for (int i = 0; i < parts.size(); i++) {
+            const ClipRef& part = parts[i];
+            auto* child = new QTreeWidgetItem(item, {QString("Part %1  ·  %2").arg(i + 1).arg(part.startText())});
+            child->setData(0, kPathRole, part.key());
+            child->setData(0, kDurationRole, part.end - part.start);
+            child->setToolTip(0, QString("%1\n%2 to %3").arg(QDir::toNativeSeparators(path),
+                                                            formatTime(part.start), formatTime(part.end)));
+        }
     }
+    m_list->expandAll();
     selectFiles(selected, current);
 }
 
+bool FileBrowser::contains(const QString& clip) const {
+    return itemOf(clip) != nullptr;
+}
+
 // Shows the cached duration, or reads it in the background.
-void FileBrowser::updateDuration(int row) {
-    QListWidgetItem* item = m_list->item(row);
-    const QString path = item->data(kPathRole).toString();
+void FileBrowser::updateDuration(QTreeWidgetItem* item) {
+    const QString path = item->data(0, kPathRole).toString();
     const QFileInfo info(path);
     const auto cached = m_durations.constFind(path);
     if (cached != m_durations.constEnd() && cached->modified == info.lastModified()
         && cached->size == info.size()) {
-        item->setData(kDurationRole, cached->duration);
+        item->setData(0, kDurationRole, cached->duration);
         return;
     }
-    item->setData(kDurationRole, QVariant());
+    item->setData(0, kDurationRole, QVariant());
     if (m_probing.contains(path)) return; // checked again when the result arrives
 
     m_probing.insert(path);
@@ -242,8 +275,7 @@ void FileBrowser::onDurationProbed(const QString& path, const QDateTime& modifie
     m_probing.remove(path);
     m_durations.insert(path, {modified, size, duration});
     // Probes again if the file changed meanwhile, e.g. while still being copied.
-    const int row = rowOf(path);
-    if (row >= 0) updateDuration(row);
+    if (QTreeWidgetItem* item = itemOf(path)) updateDuration(item);
 }
 
 // Several selection signals fire for one click (e.g. Shift+click); report once.
@@ -256,52 +288,101 @@ void FileBrowser::scheduleSelectionChanged() {
     });
 }
 
-int FileBrowser::rowOf(const QString& path) const {
-    const QString target = QFileInfo(path).absoluteFilePath();
-    for (int row = 0; row < m_list->count(); row++) {
-        if (m_list->item(row)->data(kPathRole).toString() == target) return row;
+void FileBrowser::showContextMenu(const QPoint& pos) {
+    const QTreeWidgetItem* item = m_list->itemAt(pos);
+    if (!item) return;
+    // On a part: the file it belongs to
+    if (item->parent()) item = item->parent();
+    const QString path = item->data(0, kPathRole).toString();
+    const bool split = item->data(0, kSplitRole).toBool();
+
+    QMenu menu(this);
+    QAction* splitAction = menu.addAction(Theme::icon(Theme::Icon::Cut), split ? "Edit Split..." : "Split Clip...");
+    connect(splitAction, &QAction::triggered, this, [this, path] { emit splitRequested(path); });
+    if (split) {
+        QAction* removeAction = menu.addAction("Remove Split");
+        connect(removeAction, &QAction::triggered, this, [this, path] { removeSplit(path); });
     }
-    return -1;
+    menu.exec(m_list->viewport()->mapToGlobal(pos));
+}
+
+// Joins the parts again; selected parts give way to the whole file.
+void FileBrowser::removeSplit(const QString& path) {
+    QStringList selected = selectedFiles();
+    QString current = currentFile();
+    const auto isPart = [&](const QString& clip) {
+        const ClipRef ref = ClipRef::fromKey(clip);
+        return ref.isPart() && ref.path == path;
+    };
+    const bool partSelected = std::any_of(selected.begin(), selected.end(), isPart);
+    selected.erase(std::remove_if(selected.begin(), selected.end(), isPart), selected.end());
+    if (partSelected && !selected.contains(path)) selected << path;
+    if (isPart(current)) current = path;
+
+    ClipSplits::setParts(path, {});
+    refresh();
+    selectFiles(selected, current);
+    if (partSelected) scheduleSelectionChanged();
+}
+
+QList<QTreeWidgetItem*> FileBrowser::allItems() const {
+    QList<QTreeWidgetItem*> items;
+    for (int row = 0; row < m_list->topLevelItemCount(); row++) {
+        QTreeWidgetItem* item = m_list->topLevelItem(row);
+        items << item;
+        for (int i = 0; i < item->childCount(); i++) items << item->child(i);
+    }
+    return items;
+}
+
+QTreeWidgetItem* FileBrowser::itemOf(const QString& clip) const {
+    ClipRef ref = ClipRef::fromKey(clip);
+    ref.path = QFileInfo(ref.path).absoluteFilePath();
+    const QString target = ref.key();
+    for (QTreeWidgetItem* item : allItems()) {
+        if (item->data(0, kPathRole).toString() == target) return item;
+    }
+    return nullptr;
 }
 
 QStringList FileBrowser::selectedFiles() const {
     QStringList files;
-    for (int row = 0; row < m_list->count(); row++) {
-        if (m_list->item(row)->isSelected()) files << m_list->item(row)->data(kPathRole).toString();
+    for (const QTreeWidgetItem* item : allItems()) {
+        if (item->isSelected()) files << item->data(0, kPathRole).toString();
     }
     return files;
 }
 
 QString FileBrowser::currentFile() const {
-    const QListWidgetItem* item = m_list->currentItem();
-    return item ? item->data(kPathRole).toString() : QString();
+    const QTreeWidgetItem* item = m_list->currentItem();
+    return item ? item->data(0, kPathRole).toString() : QString();
 }
 
 void FileBrowser::selectFiles(const QStringList& paths, const QString& current) {
     const QSignalBlocker blocker(m_list);
     m_list->clearSelection();
-    const int currentRow = rowOf(current.isEmpty() && !paths.isEmpty() ? paths.first() : current);
-    if (currentRow >= 0) m_list->setCurrentRow(currentRow, QItemSelectionModel::NoUpdate);
+    QTreeWidgetItem* currentItem = itemOf(current.isEmpty() && !paths.isEmpty() ? paths.first() : current);
+    if (currentItem) m_list->setCurrentItem(currentItem, 0, QItemSelectionModel::NoUpdate);
     for (const QString& path : paths) {
-        const int row = rowOf(path);
-        if (row >= 0) m_list->item(row)->setSelected(true);
+        if (QTreeWidgetItem* item = itemOf(path)) item->setSelected(true);
     }
-    if (currentRow >= 0) m_list->scrollToItem(m_list->item(currentRow));
+    if (currentItem) m_list->scrollToItem(currentItem);
 }
 
 void FileBrowser::deselectFile(const QString& path) {
-    const int row = rowOf(path);
-    if (row >= 0) m_list->item(row)->setSelected(false);
+    if (QTreeWidgetItem* item = itemOf(path)) item->setSelected(false);
 }
 
 void FileBrowser::selectNext() {
-    if (m_list->count() == 0) return;
-    m_list->setCurrentRow(std::min(m_list->currentRow() + 1, m_list->count() - 1),
-                          QItemSelectionModel::ClearAndSelect);
+    QTreeWidgetItem* current = m_list->currentItem();
+    QTreeWidgetItem* next = current ? m_list->itemBelow(current) : m_list->topLevelItem(0);
+    if (!next) next = current;
+    if (next) m_list->setCurrentItem(next, 0, QItemSelectionModel::ClearAndSelect);
 }
 
 void FileBrowser::selectPrevious() {
-    if (m_list->count() == 0) return;
-    m_list->setCurrentRow(std::max(m_list->currentRow() - 1, 0),
-                          QItemSelectionModel::ClearAndSelect);
+    QTreeWidgetItem* current = m_list->currentItem();
+    QTreeWidgetItem* previous = current ? m_list->itemAbove(current) : m_list->topLevelItem(0);
+    if (!previous) previous = current;
+    if (previous) m_list->setCurrentItem(previous, 0, QItemSelectionModel::ClearAndSelect);
 }

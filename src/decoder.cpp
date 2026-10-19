@@ -79,7 +79,7 @@ double Decoder::probeDuration(const QString& filename) {
     return duration;
 }
 
-bool Decoder::open(const QString& filename) {
+bool Decoder::open(const QString& filename, double partStart, double partEnd) {
     close();
     if (m_queue) m_queue->reopen();
 
@@ -131,6 +131,21 @@ bool Decoder::open(const QString& filename) {
         m_info.duration = stream->duration * m_timeBase;
     else if (m_fmtCtx->duration != AV_NOPTS_VALUE)
         m_info.duration = m_fmtCtx->duration / static_cast<double>(AV_TIME_BASE);
+
+    // A part of the file: shift the timeline so the part starts at 0, and
+    // begin decoding there.
+    const double fileDuration = m_info.duration;
+    m_partStart = std::max(0.0, partStart);
+    if (fileDuration > 0.0) m_partStart = std::min(m_partStart, fileDuration);
+    m_partEnds = partEnd >= 0.0 && (fileDuration <= 0.0 || partEnd < fileDuration);
+    if (m_partEnds) m_info.duration = std::max(0.0, partEnd - m_partStart);
+    else if (fileDuration > 0.0) m_info.duration = fileDuration - m_partStart;
+    m_startTime += m_partStart;
+    if (m_partStart > 0.0) {
+        m_seekTarget  = 0.0;
+        m_seekSerial  = 0;
+        m_seekPending = true;
+    }
 
     m_info.fps = av_q2d(stream->avg_frame_rate);
     if (!(m_info.fps > 0.0)) m_info.fps = av_q2d(stream->r_frame_rate);
@@ -279,8 +294,8 @@ void Decoder::run() {
     // that precedes the target. Retry from further back; returns false when
     // there is nowhere earlier to go.
     auto seekEarlier = [&]() -> bool {
-        if (seekPos > 0.0) {
-            seekDemuxer(std::max(0.0, seekTarget - seekBackoff));
+        if (seekPos > -m_partStart) {
+            seekDemuxer(std::max(-m_partStart, seekTarget - seekBackoff));
             seekBackoff *= 2.0;
             return true;
         }
@@ -372,6 +387,14 @@ void Decoder::run() {
             }
 
             const double pts = framePts(frame);
+            if (m_partEnds && pts >= m_info.duration - halfFrame) {
+                // The end of the part: as at the end of the file.
+                av_frame_unref(frame);
+                if (skipUntil >= 0.0 && held->buf[0]) queueFrame(held, heldPts);
+                finished = true;
+                if (m_queue) m_queue->setEndOfStream(serial);
+                break;
+            }
             if (pts < skipUntil) {
                 av_frame_unref(held);
                 av_frame_move_ref(held, frame);

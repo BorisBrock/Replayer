@@ -24,9 +24,9 @@ PlayerController::PlayerController(QObject* parent)
 
 PlayerController::~PlayerController() = default;
 
-bool PlayerController::openFile(const QString& filename) {
+bool PlayerController::openFile(const QString& filename, double start, double end) {
     closeFile();
-    if (!m_decoder->open(filename)) return false;
+    if (!m_decoder->open(filename, start, end)) return false;
 
     m_info = m_decoder->info();
     m_awaitingFrame = true; // show the first frame even while paused
