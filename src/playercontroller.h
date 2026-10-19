@@ -35,7 +35,11 @@ public:
     void stepForward();
     void stepBackward();
     void setSpeedMultiplier(double multiplier);
-    void setLoop(bool loop); // restart from the beginning at the end of the clip
+    void setLoop(bool loop); // restart from the start marker at the end marker
+    // Start and end markers: playback, seeking and stepping stay between
+    // them. Reset to the whole clip on open. Clamped so start < end.
+    void setTrim(double start, double end);
+    void resetTrim() { setTrim(0.0, m_info.duration); }
     void setFrameQueueCapacity(int frames) { m_frameQueue.setCapacity(frames); }
 
     bool isOpen() const;
@@ -43,6 +47,11 @@ public:
     bool isPlaying() const { return m_playing; }
     double position() const { return m_position; }
     double speedMultiplier() const { return m_speedMultiplier; }
+    double trimStart() const { return m_trimStart; }
+    double trimEnd() const { return m_trimEnd; }
+    // On the last frame (before the end marker); play() would start over.
+    bool atEnd() const { return m_frameQueue.atEnd() || atTrimEnd(); }
+    bool isTrimmed() const { return m_trimStart > 0.0 || m_trimEnd < m_info.duration; }
     const VideoInfo& videoInfo() const { return m_info; }
 
 signals:
@@ -50,6 +59,7 @@ signals:
     void positionChanged(double position);
     void playbackStateChanged(bool playing);
     void videoInfoReady(const VideoInfo& info);
+    void trimChanged(double start, double end);
     void errorOccurred(const QString& error);
 
 private slots:
@@ -60,6 +70,8 @@ private:
     void presentFrame(const FrameQueue::Frame& frame);
     double clockPts() const;
     void restartClock(double pts);
+    bool atTrimEnd() const; // the frame shown is the last one before the end marker
+    double halfFrame() const { return m_info.fps > 0.0 ? 0.5 / m_info.fps : 0.0; }
 
     // Declared before m_decoder so it outlives the decoder thread.
     FrameQueue               m_frameQueue;
@@ -77,6 +89,8 @@ private:
     double m_position        = 0.0;   // pts of the frame on screen
     double m_clockBasePts    = 0.0;   // pts at the moment m_playClock was last restarted
     double m_speedMultiplier = 1.0;
+    double m_trimStart       = 0.0;
+    double m_trimEnd         = 0.0;
 };
 
 #endif

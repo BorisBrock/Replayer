@@ -109,6 +109,24 @@ With the keyboard you can also jump:
 
 All playback commands are also in the *Playback* menu.
 
+### Start and end markers
+
+The seek bar has a **start marker** `[` and an **end marker** `]`. They sit
+at the beginning and end of the clip until you drag them inwards to cut off
+the boring part before and after the action. The parts outside the markers
+are dimmed, and playback, seeking, stepping, Stop and Loop all stay between
+the markers. While you drag a marker, the video shows the frame it is on.
+
+- **Drag a marker** to move it. Where the playhead covers a marker, grab the
+  marker's top or bottom end.
+- **Press I or O** to set the start or end marker at the current frame.
+- **Right-click the seek bar** to set a marker at that spot, or to reset both.
+  *Playback → Reset Markers* resets them too.
+
+The markers snap to frames and always stay at least two frames apart, so the
+start marker can never pass the end marker. Replayer remembers the markers of
+each clip, like its color label.
+
 ### Video info
 
 The **VIDEO** card in the side panel (click its title to open it) shows the
@@ -211,6 +229,11 @@ Each tile has its own transport bar. Use it to bring every clip to the key
 moment, e.g. the take-off of a jump: drag its seek bar, then step frame by
 frame with its own buttons until the clips match.
 
+To keep the clips lined up, set each clip's **start marker** the same time
+before the key moment (see [Start and end markers](#start-and-end-markers)),
+e.g. one second before the take-off. The comparison bar starts all clips at
+their start markers.
+
 ### The comparison bar
 
 When comparing, a bar above the clips acts on all of them together:
@@ -218,15 +241,18 @@ When comparing, a bar above the clips acts on all of them together:
 | Control             | Function                                                       |
 |---------------------|----------------------------------------------------------------|
 | Play all            | Plays or pauses all clips together (also Space)                |
-| Sync seek bar       | Moves all clips by the same amount, keeping their offsets      |
+| Sync seek bar       | Moves all clips together, each from its start marker           |
 | Grid                | Arranges the clips automatically to use the space best         |
 | Side by side        | Puts all clips in one row                                      |
 | Stacked             | Puts all clips in one column                                   |
 | Ghost: blend        | Two clips only: shows the second clip over the first, mixed    |
 | Ghost: split        | Two clips only: first clip on one side of a line, second on the other |
 
-The sync seek bar follows the outlined clip. It stops where any clip would run
-past its start or end, so all clips stay in sync.
+The start of the sync seek bar is every clip's start marker (or its
+beginning), and the bar is as long as the longest clip between its markers.
+A clip that ends earlier stands still on its last frame while the others go
+on. *Play all* does the same: it starts all clips over only once every clip
+has reached its end.
 
 All keyboard shortcuts for playback (Space, S, L, `.`, `,`, the arrow keys)
 act on **all** clips at once. Line the clips up first, then step through the
@@ -440,6 +466,7 @@ Replayer remembers these settings between sessions:
 | S                       | Stop (rewind to start)                     |
 | L                       | Loop clip on / off                         |
 | `.` / `,`               | Next / previous frame                      |
+| I / O                   | Set the start / end marker at the current frame |
 | Right / Left            | Seek forward / back 1 s                    |
 | Shift+Right / Left      | Seek forward / back 5 s                    |
 | `+` (or `=`) / `-`      | Zoom in / out                              |
@@ -479,6 +506,8 @@ In the split dialog, the playback keys work too, plus:
 | Ghost overlay line | Drag, double-click             | Change the mix or split; back to 50/50 |
 | Video              | Right-click                    | Export the frame as .png               |
 | Seek bar           | Click or drag                  | Jump to that position                  |
+| Seek bar           | Drag a `[` or `]` marker       | Cut off the clip's beginning or end    |
+| Seek bar           | Right-click                    | Set a marker there, reset the markers  |
 | Zoom navigator     | Click, drag or mouse wheel     | Move the zoomed region, zoom           |
 | Window             | Drop a folder or file          | Open it                                |
 

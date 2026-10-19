@@ -1,12 +1,13 @@
 #include "transportbar.h"
 #include "jumpsliderstyle.h"
 #include "timeformat.h"
+#include "trimslider.h"
 
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QSlider>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <cmath>
 
 TransportBar::TransportBar(QWidget* parent) : QWidget(parent) {
@@ -17,7 +18,7 @@ TransportBar::TransportBar(QWidget* parent) : QWidget(parent) {
     layout->setSpacing(4);
 
     // Position slider works in milliseconds.
-    m_positionSlider = new QSlider(Qt::Horizontal, this);
+    m_positionSlider = new TrimSlider(this);
     auto* sliderStyle = new JumpSliderStyle();
     sliderStyle->setParent(m_positionSlider);
     m_positionSlider->setStyle(sliderStyle);
@@ -26,6 +27,13 @@ TransportBar::TransportBar(QWidget* parent) : QWidget(parent) {
     connect(m_positionSlider, &QSlider::valueChanged, this, [this](int value) {
         emit seekRequested(value / 1000.0);
     });
+    // While a marker is dragged, show the frame it is on.
+    connect(m_positionSlider, &TrimSlider::trimRequested, this, [this](int start, int end, int moved) {
+        // Back at the end: the clip's exact end, not the slider's whole ms
+        emit trimRequested(start / 1000.0, end >= m_positionSlider->maximum() ? m_duration : end / 1000.0);
+        emit seekRequested(moved / 1000.0);
+    });
+    connect(m_positionSlider, &TrimSlider::trimResetRequested, this, &TransportBar::trimResetRequested);
     layout->addWidget(m_positionSlider);
 
     auto* row = new QHBoxLayout();
@@ -93,6 +101,8 @@ void TransportBar::setVideoInfo(const VideoInfo& info) {
         m_positionSlider->setRange(0, static_cast<int>(info.duration * 1000.0));
         m_positionSlider->setValue(0);
     }
+    m_positionSlider->setFrameRate(info.fps);
+    m_positionSlider->setTrim(0, m_positionSlider->maximum());
     setEnabled(true);
     setPosition(0.0);
 }
@@ -104,6 +114,7 @@ void TransportBar::clear() {
         const QSignalBlocker blocker(m_positionSlider);
         m_positionSlider->setRange(0, 0);
     }
+    m_positionSlider->setTrim(0, 0);
     m_timeLabel->setText(QString("%1 / %1").arg(formatTime(0.0)));
     m_frameLabel->setText(QString());
     setEnabled(false);
@@ -134,4 +145,9 @@ void TransportBar::setPlaybackState(bool playing) {
 void TransportBar::setLoop(bool loop) {
     const QSignalBlocker blocker(m_loopButton);
     m_loopButton->setChecked(loop);
+}
+
+void TransportBar::setTrim(double start, double end) {
+    m_positionSlider->setTrim(static_cast<int>(std::lround(start * 1000.0)),
+                              std::min(m_positionSlider->maximum(), static_cast<int>(std::lround(end * 1000.0))));
 }

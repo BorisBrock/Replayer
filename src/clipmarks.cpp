@@ -8,7 +8,7 @@
 namespace {
 
 // "marks/GX010123.MP4 1234567890" for a file, with " 12.500" appended for
-// the part starting there; a group holding "hidden" and "label".
+// the part starting there; a group holding "hidden", "label" and "trim".
 QString group(const QString& clip) {
     const ClipRef ref = ClipRef::fromKey(clip);
     const QFileInfo info(ref.path);
@@ -59,6 +59,23 @@ QColor color(const QString& clip) {
 
 void setLabel(const QString& clip, const QString& id) {
     setValue(clip, "label", id.isEmpty() ? QVariant() : QVariant(id));
+}
+
+std::pair<double, double> trim(const QString& clip) {
+    // "12.500 20.250", or "12.500 -1.000" with the end marker at the end
+    const QStringList values = QSettings().value(group(clip) + "/trim").toString().split(' ');
+    if (values.size() != 2) return {0.0, -1.0};
+    bool startOk = false, endOk = false;
+    const double start = values[0].toDouble(&startOk);
+    const double end   = values[1].toDouble(&endOk);
+    if (!startOk || !endOk || start < 0.0 || (end >= 0.0 && end <= start)) return {0.0, -1.0};
+    return {start, end};
+}
+
+void setTrim(const QString& clip, double start, double end) {
+    const bool whole = start <= 0.0 && end < 0.0;
+    setValue(clip, "trim", whole ? QVariant()
+                                 : QVariant(QString("%1 %2").arg(start, 0, 'f', 3).arg(end, 0, 'f', 3)));
 }
 
 } // namespace ClipMarks

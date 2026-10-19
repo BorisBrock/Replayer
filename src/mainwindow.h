@@ -71,11 +71,9 @@ private:
     void setPlayIntent(bool play);
     void updatePlayAllButton();
 
-    // The comparison bar's seek bar shows the current clip and moves all
-    // clips by the same amount, keeping the offsets the user set up between
-    // them (e.g. each clip cued to where the action starts).
-    PlayerController* currentController() const;
-    void captureSyncOffsets();
+    // The comparison bar's seek bar starts every clip at its start marker
+    // (e.g. each set where the action starts) and runs to the end of the
+    // longest one; a clip that ends earlier stands still on its last frame.
     void syncSeek(int ms);
     void updateSyncSlider();
 
@@ -112,13 +110,6 @@ private:
     QToolButton* m_splitButton;
     QAction*     m_loopAction = nullptr;
 
-    // Each clip's offset to the current clip, captured when a seek with the
-    // comparison bar starts, and the range the current clip can then move in
-    // without any clip running past its start or end.
-    QList<std::pair<PlayerController*, double>> m_syncOffsets;
-    bool   m_syncOffsetsValid = false;
-    double m_syncMin = 0.0;
-    double m_syncMax = 0.0;
 
     QList<ClipView*>       m_views;
     QString                m_currentClip;       // shown in the info panel

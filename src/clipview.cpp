@@ -1,4 +1,5 @@
 #include "clipview.h"
+#include "clipmarks.h"
 #include "clipref.h"
 #include "playercontroller.h"
 #include "theme.h"
@@ -59,6 +60,8 @@ ClipView::ClipView(QWidget* parent) : QFrame(parent) {
     connect(m_transportBar, &TransportBar::stepBackwardClicked, this, [this, c] { emit playRequested(false); c->stepBackward(); });
     connect(m_transportBar, &TransportBar::stepForwardClicked, this, [this, c] { emit playRequested(false); c->stepForward(); });
     connect(m_transportBar, &TransportBar::seekRequested, c, &PlayerController::seek);
+    connect(m_transportBar, &TransportBar::trimRequested, c, &PlayerController::setTrim);
+    connect(m_transportBar, &TransportBar::trimResetRequested, c, &PlayerController::resetTrim);
 
     connect(c, &PlayerController::frameReady, this, [this](const FramePtr& frame) {
         // The previous clip's last frame stays up until the new clip's first
@@ -71,6 +74,10 @@ ClipView::ClipView(QWidget* parent) : QFrame(parent) {
     });
     connect(c, &PlayerController::positionChanged, m_transportBar, &TransportBar::setPosition);
     connect(c, &PlayerController::playbackStateChanged, m_transportBar, &TransportBar::setPlaybackState);
+    connect(c, &PlayerController::trimChanged, this, [this, c](double start, double end) {
+        m_transportBar->setTrim(start, end);
+        ClipMarks::setTrim(m_path, start, end < c->videoInfo().duration ? end : -1.0);
+    });
     connect(c, &PlayerController::videoInfoReady, this, [this](const VideoInfo& info) {
         m_transportBar->setVideoInfo(info);
         m_pendingRotation = info.rotation;
@@ -101,9 +108,13 @@ bool ClipView::open(const QString& path, double position) {
         m_transportBar->clear();
         return false;
     }
-    // Resume where this clip was left, unless that was the very end.
+    // The markers set last time; this moves to the start marker.
     const VideoInfo& info = m_controller->videoInfo();
-    if (position > 0.0 && position < info.duration - 2.0 / info.fps) m_controller->seek(position);
+    const auto [start, end] = ClipMarks::trim(path);
+    m_controller->setTrim(start, end < 0.0 ? info.duration : end);
+    // Resume where this clip was left, unless that was the very end.
+    if (position > m_controller->trimStart() && position < m_controller->trimEnd() - 2.0 / info.fps)
+        m_controller->seek(position);
     return true;
 }
 

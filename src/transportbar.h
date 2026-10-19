@@ -7,10 +7,10 @@
 #include "videoframe.h"
 
 class QLabel;
-class QSlider;
 class QToolButton;
+class TrimSlider;
 
-// Seek bar, playback buttons and time display shown below the video.
+// Seek bar with start and end markers, playback buttons and time display shown below the video.
 class TransportBar : public QWidget {
     Q_OBJECT
 
@@ -26,6 +26,7 @@ public slots:
     void setPosition(double position);
     void setPlaybackState(bool playing);
     void setLoop(bool loop);
+    void setTrim(double start, double end);
 
 signals:
     void playPauseClicked();
@@ -34,11 +35,13 @@ signals:
     void stepForwardClicked();
     void seekRequested(double position);
     void loopToggled(bool loop);
+    void trimRequested(double start, double end); // a start or end marker was moved
+    void trimResetRequested();
 
 private:
     QToolButton* addButton(Theme::Icon icon, const QString& toolTip);
 
-    QSlider*     m_positionSlider;
+    TrimSlider*  m_positionSlider;
     QToolButton* m_stepBackButton;
     QToolButton* m_playPauseButton;
     QToolButton* m_stopButton;

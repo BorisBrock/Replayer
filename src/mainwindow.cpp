@@ -193,10 +193,8 @@ QWidget* MainWindow::createCompareBar() {
     m_syncSlider->setStyle(sliderStyle);
     m_syncSlider->setPageStep(1000);
     m_syncSlider->setFocusPolicy(Qt::NoFocus);
-    m_syncSlider->setToolTip("Seek all clips together, keeping their offsets to each other");
+    m_syncSlider->setToolTip("Seek all clips together, each from its start marker");
     connect(m_syncSlider, &QSlider::valueChanged, this, &MainWindow::syncSeek);
-    connect(m_syncSlider, &QSlider::sliderPressed, this, [this] { m_syncOffsetsValid = false; });
-    connect(m_syncSlider, &QSlider::sliderReleased, this, [this] { m_syncOffsetsValid = false; });
     layout->addSpacing(6);
     layout->addWidget(m_syncSlider, 1);
     layout->addSpacing(12);
@@ -308,6 +306,12 @@ void MainWindow::createActions() {
     addAction(playMenu, "Back 1 s", {Qt::Key_Left}, all([](PlayerController* c) { c->seekRelative(-1.0); }));
     addAction(playMenu, "Forward 5 s", {QKeySequence("Shift+Right")}, all([](PlayerController* c) { c->seekRelative(5.0); }));
     addAction(playMenu, "Back 5 s", {QKeySequence("Shift+Left")}, all([](PlayerController* c) { c->seekRelative(-5.0); }));
+    playMenu->addSeparator();
+    addAction(playMenu, "Set Start &Marker", {Qt::Key_I},
+              all([](PlayerController* c) { c->setTrim(c->position(), c->trimEnd()); }));
+    addAction(playMenu, "Set &End Marker", {Qt::Key_O},
+              all([](PlayerController* c) { c->setTrim(c->trimStart(), c->position()); }));
+    addAction(playMenu, "Reset M&arkers", {}, all([](PlayerController* c) { c->resetTrim(); }));
     playMenu->addSeparator();
     addAction(playMenu, "Ne&xt Clip", {Qt::Key_Down, Qt::Key_PageDown}, [this] { m_fileBrowser->selectNext(); });
     addAction(playMenu, "Previous &Clip", {Qt::Key_Up, Qt::Key_PageUp}, [this] { m_fileBrowser->selectPrevious(); });
@@ -465,9 +469,8 @@ ClipView* MainWindow::createView() {
         if (view->path() == m_currentClip && !m_thumbnailTimer->isActive()) m_thumbnailTimer->start();
     });
     connect(c, &PlayerController::playbackStateChanged, this, &MainWindow::updatePlayAllButton);
-    connect(c, &PlayerController::positionChanged, this, [this, view] {
-        if (view->path() == m_currentClip) updateSyncSlider();
-    });
+    connect(c, &PlayerController::positionChanged, this, &MainWindow::updateSyncSlider);
+    connect(c, &PlayerController::trimChanged, this, &MainWindow::updateSyncSlider);
     return view;
 }
 
@@ -514,8 +517,6 @@ void MainWindow::showClips(QStringList paths, const QString& current) {
     qDeleteAll(spare);
 
     m_views = views;
-    m_syncOffsets.clear();
-    m_syncOffsetsValid = false;
     for (ClipView* view : m_views) view->setCompact(compare);
     m_grid->setViews(m_views);
     m_compareBar->setVisible(compare);
@@ -629,8 +630,15 @@ bool MainWindow::anyPlaying() const {
 
 void MainWindow::setPlayIntent(bool play) {
     m_playIntent = play;
+    // A clip that ended before the others stays on its last frame (see
+    // syncSeek()); only when all have ended, they all start over.
+    bool allAtEnd = true;
+    forEachController([&](PlayerController* c) { allAtEnd = allAtEnd && c->atEnd(); });
     // Started back to back, so the clips stay in step.
-    forEachController([play](PlayerController* c) { play ? c->play() : c->pause(); });
+    forEachController([play, allAtEnd](PlayerController* c) {
+        if (!play) c->pause();
+        else if (allAtEnd || !c->atEnd()) c->play();
+    });
 }
 
 void MainWindow::setOverlay(OverlayMode mode) {
@@ -725,58 +733,27 @@ void MainWindow::updatePlayAllButton() {
     m_playAllButton->setIcon(Theme::icon(anyPlaying() ? Theme::Icon::Pause : Theme::Icon::Play));
 }
 
-PlayerController* MainWindow::currentController() const {
-    for (ClipView* view : m_views) {
-        if (view->path() == m_currentClip && view->controller()->isOpen()) return view->controller();
-    }
-    return nullptr;
-}
-
-void MainWindow::captureSyncOffsets() {
-    m_syncOffsets.clear();
-    m_syncOffsetsValid = false;
-    PlayerController* current = currentController();
-    if (!current) return;
-
-    const double origin = current->position();
-    m_syncMin = 0.0;
-    m_syncMax = current->videoInfo().duration;
-    for (ClipView* view : m_views) {
-        PlayerController* c = view->controller();
-        if (!c->isOpen()) continue;
-        const double offset = c->position() - origin;
-        m_syncOffsets.append({c, offset});
-        m_syncMin = std::max(m_syncMin, -offset);
-        m_syncMax = std::min(m_syncMax, c->videoInfo().duration - offset);
-    }
-    m_syncOffsetsValid = true;
-}
-
 void MainWindow::syncSeek(int ms) {
-    // Offsets are captured afresh for each wheel step or click, and once per
-    // drag, so adjustments made in a single clip in between are picked up.
-    // (A click on the groove changes the value before the slider is down.)
-    if (!m_syncOffsetsValid || !m_syncSlider->isSliderDown()) captureSyncOffsets();
-    if (m_syncOffsets.isEmpty()) return;
-
-    // Stop where the first clip reaches its start or end; letting that clip
-    // stand still while the others move on would lose its offset.
-    const double position = std::clamp(ms / 1000.0, m_syncMin, std::max(m_syncMin, m_syncMax));
-    const int clampedMs = static_cast<int>(std::lround(position * 1000.0));
-    if (clampedMs != ms) {
-        const QSignalBlocker blocker(m_syncSlider);
-        m_syncSlider->setValue(clampedMs);
-    }
-    for (const auto& [controller, offset] : m_syncOffsets) controller->seek(position + offset);
+    // Past its end marker, seek() keeps a clip on its last frame.
+    const double time = ms / 1000.0;
+    forEachController([time](PlayerController* c) { c->seek(c->trimStart() + time); });
 }
 
 void MainWindow::updateSyncSlider() {
-    PlayerController* current = currentController();
-    m_syncSlider->setEnabled(current != nullptr);
+    // The bar shows the clip that is furthest along, and is as long as the
+    // longest clip between its markers.
+    bool any = false;
+    double length = 0.0, time = 0.0;
+    forEachController([&](PlayerController* c) {
+        any    = true;
+        length = std::max(length, c->trimEnd() - c->trimStart());
+        time   = std::max(time, c->position() - c->trimStart());
+    });
+    m_syncSlider->setEnabled(any);
     if (m_syncSlider->isSliderDown()) return; // don't fight the user while they drag
     const QSignalBlocker blocker(m_syncSlider);
-    m_syncSlider->setRange(0, current ? static_cast<int>(current->videoInfo().duration * 1000.0) : 0);
-    m_syncSlider->setValue(current ? static_cast<int>(current->position() * 1000.0) : 0);
+    m_syncSlider->setRange(0, static_cast<int>(length * 1000.0));
+    m_syncSlider->setValue(static_cast<int>(time * 1000.0));
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* event) {

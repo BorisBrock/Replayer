@@ -91,6 +91,7 @@ add_executable(replayer WIN32 MACOSX_BUNDLE
     src/clipgrid.cpp        src/clipgrid.h
     src/filebrowser.cpp     src/filebrowser.h
     src/transportbar.cpp    src/transportbar.h
+    src/trimslider.cpp      src/trimslider.h
     src/jumpsliderstyle.h
     src/infopanel.cpp       src/infopanel.h
     src/collapsiblesection.cpp src/collapsiblesection.h
