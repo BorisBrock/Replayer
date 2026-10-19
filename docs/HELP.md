@@ -138,6 +138,8 @@ Without a remote for the camera, it is easiest to leave it recording while
 you do several jumps in a row. To compare those jumps, split the recording
 into parts: each part then works like a clip of its own.
 
+![Splitting a long recording into parts](images/split-clip.png)
+
 1. **Right-click the recording** in the clip list and choose **Split Clip...**.
 2. **Set a marker between each jump:** play or step to the frame and press
    **M** (or click **Add Marker**). Markers sit on the timeline below the
@@ -426,6 +428,15 @@ Replayer remembers these settings between sessions:
 | Ctrl+Delete             | Clear all annotations of the current clip  |
 
 When comparing clips, the playback keys act on all of them at once.
+
+In the split dialog, the playback keys work too, plus:
+
+| Key                     | Action                                     |
+|-------------------------|--------------------------------------------|
+| M                       | Set a marker at the current frame          |
+| Delete                  | Remove the selected marker                 |
+| Enter                   | Apply the split                            |
+| Esc                     | Cancel                                     |
 
 ### Mouse
 

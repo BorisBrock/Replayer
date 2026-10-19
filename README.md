@@ -34,6 +34,8 @@ between take-off and landing? Replayer lets you find out.
   frame at a time.
 - **⏱️ Improve your timing.** Line up several attempts side by side and
   see exactly where one take-off was better than the other.
+- **✂️ No remote? No problem.** Keep the camera rolling for all your runs,
+  then split the recording into one clip per attempt.
 
 ### Example: the mountain bike jump
 
@@ -76,6 +78,18 @@ and loop the interesting part as often as you like.
 
 Select up to six clips and watch them side by side. Align them at the key
 moment, then play, pause and step them all in sync.
+
+### ✂️ Split long recordings into single runs
+
+<p align="center">
+  <img src="docs/images/split-clip.png" alt="Splitting a long recording into parts" width="100%">
+</p>
+
+No camera remote? Just keep recording while you do jump after jump.
+Right-click the recording and choose *Split Clip...*: set a marker between
+the runs, skip the walk back up, and every run becomes a clip of its own –
+ready to compare side by side. Or let **Suggest Markers** find the jumps for
+you by detecting the motion in the picture. Your video files stay untouched.
 
 ### 🔍 Zoom in on the action
 
@@ -198,6 +212,7 @@ If Replayer helps you land that jump, you can buy me a coffee. Thank you!
 |-------------------------|-------------------------------------|
 | Down / Up (PgDn / PgUp) | Next / previous clip                |
 | Ctrl+click, Shift+click | Select clips to compare             |
+| Right-click a clip      | Split a long recording into runs    |
 | Space                   | Play / pause                        |
 | S                       | Stop (rewind to start)              |
 | L                       | Loop clip on / off                  |
