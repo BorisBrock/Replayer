@@ -30,6 +30,7 @@ public slots:
     void clearVideoInfo();
     void setSpeedMultiplier(double multiplier);
     void setZoom(const ViewZoom& zoom);
+    void setZoomLocked(bool locked);
     void setThumbnail(const QImage& image);
     void setDrawTool(DrawTool tool);
     // Undo/redo/clear, reference and speed of the current clip (nullptr: none)
@@ -42,6 +43,7 @@ signals:
     void zoomCenterRequested(QPointF center);          // navigator click/drag
     void zoomAtRequested(double factor, QPointF point); // navigator wheel
     void zoomResetRequested();
+    void zoomLockToggled(bool locked);              // off: each clip zooms on its own
     void drawStyleChanged(const DrawStyle& style);
     void undoRequested();
     void redoRequested();
@@ -67,6 +69,7 @@ private:
     ZoomNavigator* m_navigator;
     QSlider*       m_zoomSlider;
     QLabel*        m_zoomLabel;
+    QToolButton*   m_zoomLockButton;
 
     DrawStyle                    m_drawStyle;
     QMap<DrawTool, QToolButton*> m_toolButtons;

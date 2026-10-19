@@ -76,7 +76,8 @@ InfoPanel::InfoPanel(QWidget* parent) : QWidget(parent) {
     speedLayout->addWidget(m_speedLabel);
     mainLayout->addWidget(speedSection);
 
-    // Zoom and pan, shared by all clips (they usually come from one camera).
+    // Zoom and pan, shared by all clips (they usually come from one camera)
+    // while locked, otherwise of the current clip.
     auto* zoomSection = new CollapsibleSection("ZOOM", "zoom", true, this);
     auto* zoomGroup   = zoomSection->body();
     auto* zoomLayout = new QVBoxLayout(zoomGroup);
@@ -96,13 +97,22 @@ InfoPanel::InfoPanel(QWidget* parent) : QWidget(parent) {
     resetButton->setToolTip("Show the whole frame (0)");
     resetButton->setFocusPolicy(Qt::NoFocus);
     connect(resetButton, &QPushButton::clicked, this, &InfoPanel::zoomResetRequested);
+    m_zoomLockButton = new QToolButton(zoomGroup);
+    m_zoomLockButton->setCheckable(true);
+    m_zoomLockButton->setFocusPolicy(Qt::NoFocus);
+    connect(m_zoomLockButton, &QToolButton::toggled, this, [this](bool locked) {
+        setZoomLocked(locked);
+        emit zoomLockToggled(locked);
+    });
     zoomRow->addWidget(m_zoomLabel, 1);
+    zoomRow->addWidget(m_zoomLockButton);
     zoomRow->addWidget(resetButton);
     zoomLayout->addWidget(m_navigator);
     zoomLayout->addWidget(m_zoomSlider);
     zoomLayout->addLayout(zoomRow);
     mainLayout->addWidget(zoomSection);
     setZoom(ViewZoom());
+    setZoomLocked(true);
 
     mainLayout->addWidget(createAnnotationGroup());
     setAnnotations(nullptr);
@@ -356,6 +366,16 @@ void InfoPanel::setZoom(const ViewZoom& zoom) {
     }
     m_zoomLabel->setText(QString("Zoom %1x").arg(zoom.zoom, 0, 'f', 1));
     m_navigator->setZoom(zoom);
+}
+
+void InfoPanel::setZoomLocked(bool locked) {
+    {
+        const QSignalBlocker blocker(m_zoomLockButton);
+        m_zoomLockButton->setChecked(locked);
+    }
+    m_zoomLockButton->setIcon(Theme::icon(locked ? Theme::Icon::Lock : Theme::Icon::LockOpen, !locked));
+    m_zoomLockButton->setToolTip(locked ? "Zoom and pan all clips together (click to zoom each clip on its own)"
+                                        : "Zoom and pan the current clip only (click to zoom all clips together)");
 }
 
 void InfoPanel::setThumbnail(const QImage& image) {

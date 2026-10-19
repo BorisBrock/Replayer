@@ -407,6 +407,21 @@ void paintIcon(QPainter& p, Theme::Icon which) {
             return s;
         }(), 1.8);
         break;
+    case Theme::Icon::Lock:
+    case Theme::Icon::LockOpen:
+        // Padlock body with its shackle; the shackle is raised when open
+        stroke([which] {
+            const bool open = which == Theme::Icon::LockOpen;
+            const double lift = open ? 3.0 : 0.0;
+            QPainterPath s;
+            s.addRoundedRect(QRectF(5, 11, 14, 10), 2, 2);
+            s.moveTo(16, 11);
+            s.lineTo(16, 8 - lift);
+            s.arcTo(QRectF(8, 4 - lift, 8, 8), 0, 180);
+            s.lineTo(8, open ? 8 - lift : 11);
+            return s;
+        }(), 1.8);
+        break;
     case Theme::Icon::MarkA:
     case Theme::Icon::MarkB: {
         // A marker ring with its letter

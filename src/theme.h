@@ -36,6 +36,7 @@ enum class Icon {
     Close, LayoutGrid, LayoutSideBySide, LayoutStacked, Clip,
     Line, Arrow, Freehand, Circle, Ruler, Measure, Undo, Redo, Trash, MarkA, MarkB,
     GhostBlend, GhostSplit, GhostSplitHorizontal, ChevronDown, ChevronRight, Cut, Eye, EyeOff,
+    Lock, LockOpen,
 };
 
 // Vector icons drawn at runtime, so they stay crisp at any scale factor.
