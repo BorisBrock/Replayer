@@ -1,4 +1,5 @@
 #include "filebrowser.h"
+#include "clipmarks.h"
 #include "clipsplits.h"
 
 #include <QApplication>
@@ -6,6 +7,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
 #include <QPainter>
@@ -13,6 +15,7 @@
 #include <QRegularExpression>
 #include <QStyledItemDelegate>
 #include <QTimer>
+#include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 #include <algorithm>
@@ -32,6 +35,8 @@ const QStringList kVideoSuffixes = {
 constexpr int kPathRole     = Qt::UserRole;     // ClipRef key
 constexpr int kDurationRole = Qt::UserRole + 1; // seconds; -1: unreadable, unset: pending
 constexpr int kSplitRole    = Qt::UserRole + 2; // a file that has parts
+constexpr int kHiddenRole   = Qt::UserRole + 3; // see ClipMarks
+constexpr int kColorRole    = Qt::UserRole + 4; // label colour, unset: none
 
 // Cameras number their clips in recording order, so sorting by name lists
 // them oldest first. GoPro puts the chapter of a split recording before the
@@ -62,7 +67,8 @@ QString durationText(const QVariant& value) {
 }
 
 // Clip icon (scissors for a split file), file name and duration. The name gets whatever width is left
-// and is shortened in the middle, so the extension stays visible.
+// and is shortened in the middle, so the extension stays visible. A colour label tints the row and
+// colours the icon and name; hidden clips (when shown) are faded.
 class ClipDelegate : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
@@ -82,14 +88,29 @@ public:
         style->drawControl(QStyle::CE_ItemViewItem, &opt, p, widget);
 
         const bool selected = opt.state.testFlag(QStyle::State_Selected);
-        const QColor text = selected ? Theme::selectionText() : opt.palette.color(QPalette::Text);
+        const QColor label = index.data(kColorRole).value<QColor>();
+        p->save();
+        if (label.isValid() && !selected) {
+            // Same shape as the hover and selection background
+            QColor tint = label;
+            tint.setAlphaF(0.16);
+            p->setRenderHint(QPainter::Antialiasing);
+            p->setPen(Qt::NoPen);
+            p->setBrush(tint);
+            p->drawRoundedRect(QRectF(opt.rect).adjusted(0, 1, 0, -1), 6, 6);
+        }
+        if (index.data(kHiddenRole).toBool()) p->setOpacity(0.4);
+
+        QColor text = selected ? Theme::selectionText() : opt.palette.color(QPalette::Text);
         QColor muted = selected ? text : opt.palette.color(QPalette::PlaceholderText);
         if (selected) muted.setAlphaF(0.75);
+        const QColor iconColor = label.isValid() ? label : muted;
+        if (label.isValid() && !selected) text = label;
 
         QRect r = opt.rect.adjusted(kPadding, 0, -kPadding, 0);
         const QRectF iconRect(r.left(), r.top() + (r.height() - kIconSize) / 2.0, kIconSize, kIconSize);
         const bool split = index.data(kSplitRole).toBool();
-        Theme::drawIcon(*p, split ? Theme::Icon::Cut : Theme::Icon::Clip, iconRect, muted);
+        Theme::drawIcon(*p, split ? Theme::Icon::Cut : Theme::Icon::Clip, iconRect, iconColor);
         r.setLeft(r.left() + kIconSize + kGap);
 
         // Fixed column width, so the names line up
@@ -97,7 +118,6 @@ public:
         const QString duration = durationText(index.data(kDurationRole));
         const int durationWidth = std::max(fm.horizontalAdvance("88:88"), fm.horizontalAdvance(duration));
 
-        p->save();
         p->setFont(opt.font);
         p->setPen(muted);
         p->drawText(r, Qt::AlignRight | Qt::AlignVCenter, duration);
@@ -134,12 +154,22 @@ FileBrowser::FileBrowser(QWidget* parent) : QWidget(parent) {
     connect(openButton, &QPushButton::clicked, this, &FileBrowser::openFolderClicked);
     layout->addWidget(openButton);
 
+    auto* folderRow = new QHBoxLayout;
+    folderRow->setContentsMargins(0, 0, 0, 0);
     m_folderLabel = new QLabel(this);
     m_folderLabel->setObjectName("MutedLabel");
-    m_folderLabel->setAlignment(Qt::AlignHCenter);
+    m_folderLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_folderLabel->setWordWrap(true);
     m_folderLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    layout->addWidget(m_folderLabel);
+    folderRow->addWidget(m_folderLabel, 1);
+
+    m_hiddenButton = new QToolButton(this);
+    m_hiddenButton->setIcon(Theme::icon(Theme::Icon::Eye, true));
+    m_hiddenButton->setCheckable(true);
+    m_hiddenButton->setEnabled(false);
+    connect(m_hiddenButton, &QToolButton::toggled, this, &FileBrowser::setShowHidden);
+    folderRow->addWidget(m_hiddenButton);
+    layout->addLayout(folderRow);
 
     m_list = new QTreeWidget(this);
     m_list->setObjectName("ClipList");
@@ -152,7 +182,8 @@ FileBrowser::FileBrowser(QWidget* parent) : QWidget(parent) {
     m_list->setItemDelegate(new ClipDelegate(m_list));
     m_list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_list->setToolTip("Ctrl+click or Shift+click to compare several clips.\n"
-                       "Right-click a long recording to split it into parts.");
+                       "Right-click a clip to give it a color or hide it,\n"
+                       "or a long recording to split it into parts.");
     m_list->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_list, &QTreeWidget::customContextMenuRequested, this, &FileBrowser::showContextMenu);
     connect(m_list, &QTreeWidget::itemSelectionChanged, this, &FileBrowser::scheduleSelectionChanged);
@@ -219,28 +250,52 @@ void FileBrowser::refresh() {
         return collator.compare(sortKey(a), sortKey(b)) < 0;
     });
 
+    // Hidden clips are left out above, or shown faded.
+    int hiddenCount = 0;
+    const auto mark = [&](QTreeWidgetItem* item, const QString& clip, const QString& toolTip) {
+        const bool hidden = ClipMarks::isHidden(clip);
+        item->setData(0, kHiddenRole, hidden);
+        const QColor color = ClipMarks::color(clip);
+        if (color.isValid()) item->setData(0, kColorRole, color);
+        item->setToolTip(0, hidden ? toolTip + "\nHidden" : toolTip);
+    };
+
     const QSignalBlocker blocker(m_list);
     m_list->clear();
     for (const QString& name : names) {
         const QString path = dir.absoluteFilePath(name);
+        if (ClipMarks::isHidden(path)) {
+            hiddenCount++;
+            if (!m_showHidden) continue;
+        }
         auto* item = new QTreeWidgetItem(m_list, {name});
         item->setData(0, kPathRole, path);
-        item->setToolTip(0, QDir::toNativeSeparators(path));
+        mark(item, path, QDir::toNativeSeparators(path));
         updateDuration(item);
 
         const QList<ClipRef> parts = ClipSplits::parts(path);
         item->setData(0, kSplitRole, !parts.isEmpty());
         for (int i = 0; i < parts.size(); i++) {
             const ClipRef& part = parts[i];
+            if (ClipMarks::isHidden(part.key())) {
+                hiddenCount++;
+                if (!m_showHidden) continue;
+            }
             auto* child = new QTreeWidgetItem(item, {QString("Part %1  ·  %2").arg(i + 1).arg(part.startText())});
             child->setData(0, kPathRole, part.key());
             child->setData(0, kDurationRole, part.end - part.start);
-            child->setToolTip(0, QString("%1\n%2 to %3").arg(QDir::toNativeSeparators(path),
-                                                            formatTime(part.start), formatTime(part.end)));
+            mark(child, part.key(), QString("%1\n%2 to %3").arg(QDir::toNativeSeparators(path),
+                                                               formatTime(part.start), formatTime(part.end)));
         }
     }
     m_list->expandAll();
     selectFiles(selected, current);
+
+    // Stays enabled while hidden clips are shown, so they can be put away again.
+    m_hiddenButton->setEnabled(hiddenCount > 0 || m_showHidden);
+    m_hiddenButton->setToolTip(hiddenCount == 0 ? QString("No hidden clips")
+                               : QString("%1 %2 hidden clip%3").arg(m_showHidden ? "Showing" : "Show")
+                                     .arg(hiddenCount).arg(hiddenCount == 1 ? "" : "s"));
 }
 
 bool FileBrowser::contains(const QString& clip) const {
@@ -291,10 +346,13 @@ void FileBrowser::scheduleSelectionChanged() {
 void FileBrowser::showContextMenu(const QPoint& pos) {
     const QTreeWidgetItem* item = m_list->itemAt(pos);
     if (!item) return;
-    // On a part: the file it belongs to
-    if (item->parent()) item = item->parent();
-    const QString path = item->data(0, kPathRole).toString();
-    const bool split = item->data(0, kSplitRole).toBool();
+    // Colour and hiding act on the whole selection when it was right-clicked.
+    const QStringList clips = item->isSelected() ? selectedFiles()
+                                                 : QStringList{item->data(0, kPathRole).toString()};
+    // Splitting on a part: the file it belongs to
+    const QTreeWidgetItem* file = item->parent() ? item->parent() : item;
+    const QString path = file->data(0, kPathRole).toString();
+    const bool split = file->data(0, kSplitRole).toBool();
 
     QMenu menu(this);
     QAction* splitAction = menu.addAction(Theme::icon(Theme::Icon::Cut), split ? "Edit Split..." : "Split Clip...");
@@ -303,7 +361,49 @@ void FileBrowser::showContextMenu(const QPoint& pos) {
         QAction* removeAction = menu.addAction("Remove Split");
         connect(removeAction, &QAction::triggered, this, [this, path] { removeSplit(path); });
     }
+    menu.addSeparator();
+
+    QMenu* colorMenu = menu.addMenu("Color");
+    const QColor current = clips.size() == 1 ? ClipMarks::color(clips.first()) : QColor();
+    for (const ClipMarks::Label& label : ClipMarks::labels()) {
+        QAction* action = colorMenu->addAction(Theme::swatch(label.color), label.name);
+        action->setCheckable(true);
+        action->setChecked(label.color == current);
+        connect(action, &QAction::triggered, this, [this, clips, id = label.id] { setLabel(clips, id); });
+    }
+    colorMenu->addSeparator();
+    QAction* noColor = colorMenu->addAction("No Color");
+    noColor->setEnabled(std::any_of(clips.begin(), clips.end(),
+                                    [](const QString& clip) { return ClipMarks::color(clip).isValid(); }));
+    connect(noColor, &QAction::triggered, this, [this, clips] { setLabel(clips, {}); });
+
+    const bool allHidden = std::all_of(clips.begin(), clips.end(), ClipMarks::isHidden);
+    const QString count = clips.size() == 1 ? QString("Clip") : QString("%1 Clips").arg(clips.size());
+    QAction* hideAction = menu.addAction(Theme::icon(allHidden ? Theme::Icon::Eye : Theme::Icon::EyeOff),
+                                         (allHidden ? "Show " : "Hide ") + count);
+    connect(hideAction, &QAction::triggered, this, [this, clips, allHidden] { setHidden(clips, !allHidden); });
+
     menu.exec(m_list->viewport()->mapToGlobal(pos));
+}
+
+void FileBrowser::setHidden(const QStringList& clips, bool hidden) {
+    for (const QString& clip : clips) ClipMarks::setHidden(clip, hidden);
+    const QStringList selected = selectedFiles();
+    refresh();
+    // Hidden clips leave the selection.
+    if (selectedFiles() != selected) scheduleSelectionChanged();
+}
+
+void FileBrowser::setLabel(const QStringList& clips, const QString& id) {
+    for (const QString& clip : clips) ClipMarks::setLabel(clip, id);
+    refresh();
+}
+
+void FileBrowser::setShowHidden(bool show) {
+    m_showHidden = show;
+    const QStringList selected = selectedFiles();
+    refresh();
+    if (selectedFiles() != selected) scheduleSelectionChanged();
 }
 
 // Joins the parts again; selected parts give way to the whole file.

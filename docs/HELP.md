@@ -8,6 +8,7 @@ overview of what Replayer can do, see the [README](../README.md).
 - [Playing a clip](#playing-a-clip)
 - [Slow motion](#slow-motion)
 - [Splitting a long recording](#splitting-a-long-recording)
+- [Color labels and hidden clips](#color-labels-and-hidden-clips)
 - [Comparing clips](#comparing-clips)
 - [Zoom and pan](#zoom-and-pan)
 - [Drawing](#drawing)
@@ -165,6 +166,25 @@ minute of video.
   the folder, e.g. from the camera's memory card to your computer. The video
   file itself is never changed.
 - Each part keeps its own position and drawings, like any other clip.
+
+---
+
+## Color labels and hidden clips
+
+Right-click a clip (or one of its parts) in the clip list to tidy it up. With
+several clips selected, right-click one of them to change them all at once.
+
+- **Color:** mark clips that stand out, e.g. green for a clean landing and
+  red for one that almost went wrong. The clip's icon and name take on the
+  color and its row is tinted. **No Color** removes the label again.
+- **Hide Clip:** removes a clip from the list, e.g. one that is too short or
+  shows nothing of interest. The eye button next to the folder name shows
+  hidden clips again, faded; right-click one and choose **Show Clip** to
+  bring it back for good. Click the eye button again to put the hidden clips
+  away. Hiding a split recording hides its parts too.
+
+Like splits, labels and hidden clips are remembered by file name and size, so
+they stay when you copy the folder. The video files are never changed.
 
 ---
 
@@ -444,7 +464,7 @@ In the split dialog, the playback keys work too, plus:
 |--------------------|--------------------------------|----------------------------------------|
 | Clip list          | Click                          | Play that clip                         |
 | Clip list          | Ctrl+click, Shift+click        | Select clips to compare                |
-| Clip list          | Right-click                    | Split a recording into parts           |
+| Clip list          | Right-click                    | Split, color or hide a clip            |
 | Split timeline     | Click, drag a marker           | Seek, move the marker                  |
 | Split timeline     | Double-click a part            | Keep or skip that part                 |
 | Video              | Mouse wheel                    | Zoom in / out at the pointer           |

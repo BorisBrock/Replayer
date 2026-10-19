@@ -9,6 +9,7 @@
 
 class QFileSystemWatcher;
 class QLabel;
+class QToolButton;
 class QTreeWidget;
 class QTreeWidgetItem;
 
@@ -17,6 +18,8 @@ class QTreeWidgetItem;
 // (mouse or keyboard; Ctrl/Shift for several) emits selectionChanged(). The
 // list follows changes on disk, e.g. clips being copied in from a camera.
 // Clip durations are read in the background and shown next to the names.
+// Clips can be given a colour label or be hidden (see ClipMarks); hidden
+// clips are left out unless the eye button above the list shows them.
 class FileBrowser : public QWidget {
     Q_OBJECT
 
@@ -54,6 +57,9 @@ private:
     void scheduleSelectionChanged();
     void showContextMenu(const QPoint& pos);
     void removeSplit(const QString& path);
+    void setHidden(const QStringList& clips, bool hidden);
+    void setLabel(const QStringList& clips, const QString& id);
+    void setShowHidden(bool show);
     QTreeWidgetItem* itemOf(const QString& clip) const;
     QList<QTreeWidgetItem*> allItems() const; // in list order
     void updateDuration(QTreeWidgetItem* item);
@@ -70,7 +76,9 @@ private:
     QThreadPool           m_probePool;
 
     bool                 m_changePending = false;
+    bool                 m_showHidden    = false;
     QLabel*              m_folderLabel;
+    QToolButton*         m_hiddenButton;
     QTreeWidget*         m_list;
     QFileSystemWatcher*  m_watcher;
     QString              m_folder;

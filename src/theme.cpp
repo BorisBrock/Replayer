@@ -393,6 +393,19 @@ void paintIcon(QPainter& p, Theme::Icon which) {
             return s;
         }(), 1.8);
         break;
+    case Theme::Icon::Eye:
+    case Theme::Icon::EyeOff:
+        // Almond outline with the iris; struck through when off
+        stroke([which] {
+            QPainterPath s;
+            s.moveTo(3, 12);
+            s.quadTo(12, 3, 21, 12);
+            s.quadTo(12, 21, 3, 12);
+            s.addEllipse(QPointF(12, 12), 3, 3);
+            if (which == Theme::Icon::EyeOff) { s.moveTo(5, 19); s.lineTo(19, 5); }
+            return s;
+        }(), 1.8);
+        break;
     case Theme::Icon::MarkA:
     case Theme::Icon::MarkB: {
         // A marker ring with its letter
