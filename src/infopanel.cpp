@@ -93,6 +93,7 @@ InfoPanel::InfoPanel(QWidget* parent) : QWidget(parent) {
     auto* zoomRow = new QHBoxLayout();
     m_zoomLabel = new QLabel(zoomGroup);
     m_zoomLabel->setObjectName("MutedLabel");
+    m_zoomLabel->setMinimumWidth(m_zoomLabel->fontMetrics().horizontalAdvance("Zoom 8.0x")); // widest text
     auto* resetButton = new QPushButton("Reset", zoomGroup);
     resetButton->setToolTip("Show the whole frame (0)");
     resetButton->setFocusPolicy(Qt::NoFocus);
@@ -118,7 +119,6 @@ InfoPanel::InfoPanel(QWidget* parent) : QWidget(parent) {
     setAnnotations(nullptr);
 
     mainLayout->addStretch();
-    setMinimumWidth(200);
 
     clearVideoInfo();
 }

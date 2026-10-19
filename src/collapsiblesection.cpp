@@ -5,6 +5,7 @@
 #include <QSettings>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <algorithm>
 
 CollapsibleSection::CollapsibleSection(const QString& title, const QString& settingsKey, bool expandedByDefault,
                                        QWidget* parent)
@@ -46,4 +47,10 @@ void CollapsibleSection::setExpanded(bool expanded) {
     m_header->setIcon(Theme::icon(expanded ? Theme::Icon::ChevronDown : Theme::Icon::ChevronRight, true));
     m_header->setToolTip(expanded ? "Hide" : "Show");
     m_body->setVisible(expanded);
+}
+
+QSize CollapsibleSection::minimumSizeHint() const {
+    QSize size = QWidget::minimumSizeHint();
+    size.setWidth(std::max(size.width(), m_body->minimumSizeHint().width()));
+    return size;
 }

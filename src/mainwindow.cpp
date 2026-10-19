@@ -30,6 +30,7 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSettings>
 #include <QSlider>
 #include <QSplitter>
@@ -58,6 +59,19 @@ QString appTitle() {
     return QString("%1 %2").arg(QApplication::applicationName(), QApplication::applicationVersion());
 }
 
+// Scroll area for the side panel that can't be made narrower than the panel's
+// cards, so the splitter doesn't squeeze or cut off their contents.
+class SidePanelArea : public QScrollArea {
+public:
+    using QScrollArea::QScrollArea;
+
+    QSize minimumSizeHint() const override {
+        QSize size = QScrollArea::minimumSizeHint();
+        if (widget()) size.setWidth(widget()->minimumSizeHint().width() + verticalScrollBar()->sizeHint().width());
+        return size;
+    }
+};
+
 } // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
@@ -69,7 +83,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_infoPanel   = new InfoPanel(this);
 
     // The panel scrolls when the window is too low for all of its cards.
-    m_sidePanel = new QScrollArea(this);
+    m_sidePanel = new SidePanelArea(this);
     m_sidePanel->setObjectName("SidePanel");
     m_sidePanel->setWidget(m_infoPanel);
     m_sidePanel->setWidgetResizable(true);
