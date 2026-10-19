@@ -276,8 +276,12 @@ The **navigator** in the ZOOM card shows the whole frame with a rectangle
 around the part you see. Click or drag in it to move that rectangle, or use
 the mouse wheel on it to zoom.
 
-Zoom is shared by all compared clips, since they usually come from the same
-camera position.
+By default, zoom is shared by all compared clips, since they usually come
+from the same camera position. To zoom each clip on its own, open the
+**lock** next to *Reset* in the ZOOM card. The mouse wheel and dragging then
+act on the clip under the pointer, while the ZOOM card and the keys act on
+the current clip (the one with the accent-coloured border; click a clip to make
+it current). Closing the lock again gives every clip the current clip's zoom.
 
 ---
 

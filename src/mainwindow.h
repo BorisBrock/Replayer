@@ -85,8 +85,12 @@ private:
     void setOverlay(OverlayMode mode);
     void applyOverlay();
 
-    // Zoom is shared by all clips (they usually come from one static camera).
-    void setZoom(ViewZoom zoom);
+    // Zoom is shared by all clips while locked (they usually come from one
+    // static camera); unlocked, each clip has its own and the side panel
+    // shows the current clip's.
+    ViewZoom zoomOf(const QString& path) const;
+    void setZoom(ViewZoom zoom, const QString& path); // path: the clip zoomed, used when unlocked
+    void setZoomLocked(bool locked);
     void updateThumbnail();
 
     // Drawings are kept per clip (this session only); the tools are shared.
@@ -124,7 +128,9 @@ private:
     double                 m_speed      = 1.0;
     OverlayMode            m_overlay    = OverlayMode::None;
     bool                   m_horizontalSplit = false;
-    ViewZoom               m_zoom;
+    ViewZoom               m_zoom;              // shared while locked
+    QHash<QString, ViewZoom> m_zooms;           // per clip while unlocked, this session only
+    bool                   m_zoomLocked = true;
     QTimer*                m_thumbnailTimer = nullptr;
 };
 

@@ -30,6 +30,7 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSettings>
 #include <QSlider>
 #include <QSplitter>
@@ -58,6 +59,19 @@ QString appTitle() {
     return QString("%1 %2").arg(QApplication::applicationName(), QApplication::applicationVersion());
 }
 
+// Scroll area for the side panel that can't be made narrower than the panel's
+// cards, so the splitter doesn't squeeze or cut off their contents.
+class SidePanelArea : public QScrollArea {
+public:
+    using QScrollArea::QScrollArea;
+
+    QSize minimumSizeHint() const override {
+        QSize size = QScrollArea::minimumSizeHint();
+        if (widget()) size.setWidth(widget()->minimumSizeHint().width() + verticalScrollBar()->sizeHint().width());
+        return size;
+    }
+};
+
 } // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
@@ -69,7 +83,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_infoPanel   = new InfoPanel(this);
 
     // The panel scrolls when the window is too low for all of its cards.
-    m_sidePanel = new QScrollArea(this);
+    m_sidePanel = new SidePanelArea(this);
     m_sidePanel->setObjectName("SidePanel");
     m_sidePanel->setWidget(m_infoPanel);
     m_sidePanel->setWidgetResizable(true);
@@ -107,21 +121,23 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         forEachController([speed](PlayerController* c) { c->setSpeedMultiplier(speed); });
     });
     connect(m_infoPanel, &InfoPanel::zoomChanged, this, [this](double zoom) {
-        ViewZoom z = m_zoom;
+        ViewZoom z = zoomOf(m_currentClip);
         z.setZoom(zoom);
-        setZoom(z);
+        setZoom(z, m_currentClip);
     });
     connect(m_infoPanel, &InfoPanel::zoomCenterRequested, this, [this](QPointF center) {
-        ViewZoom z = m_zoom;
+        ViewZoom z = zoomOf(m_currentClip);
         z.setCenter(center);
-        setZoom(z);
+        setZoom(z, m_currentClip);
     });
     connect(m_infoPanel, &InfoPanel::zoomAtRequested, this, [this](double factor, QPointF point) {
-        ViewZoom z = m_zoom;
+        ViewZoom z = zoomOf(m_currentClip);
         z.zoomAt(factor, point);
-        setZoom(z);
+        setZoom(z, m_currentClip);
     });
-    connect(m_infoPanel, &InfoPanel::zoomResetRequested, this, [this] { setZoom(ViewZoom()); });
+    connect(m_infoPanel, &InfoPanel::zoomResetRequested, this, [this] { setZoom(ViewZoom(), m_currentClip); });
+    connect(m_infoPanel, &InfoPanel::zoomLockToggled, this, &MainWindow::setZoomLocked);
+    setZoomLocked(QSettings().value("zoom/locked", true).toBool());
     connect(m_infoPanel, &InfoPanel::drawStyleChanged, this, [this](const DrawStyle& style) {
         for (ClipView* view : m_views) view->setDrawStyle(style);
     });
@@ -301,14 +317,14 @@ void MainWindow::createActions() {
     viewMenu->addSeparator();
     auto zoomBy = [this](double factor) {
         return [this, factor] {
-            ViewZoom z = m_zoom;
+            ViewZoom z = zoomOf(m_currentClip);
             z.zoomAt(factor, z.center);
-            setZoom(z);
+            setZoom(z, m_currentClip);
         };
     };
     addAction(viewMenu, "Zoom &In", {Qt::Key_Plus, Qt::Key_Equal}, zoomBy(1.25));
     addAction(viewMenu, "Zoom &Out", {Qt::Key_Minus}, zoomBy(1.0 / 1.25));
-    addAction(viewMenu, "&Reset Zoom", {Qt::Key_0}, [this] { setZoom(ViewZoom()); });
+    addAction(viewMenu, "&Reset Zoom", {Qt::Key_0}, [this] { setZoom(ViewZoom(), m_currentClip); });
     viewMenu->addSeparator();
     // Two clips: tiles -> blend -> split -> tiles
     addAction(viewMenu, "&Ghost Overlay", {Qt::Key_G}, [this] {
@@ -435,16 +451,15 @@ ClipView* MainWindow::createView() {
     });
     connect(view->transportBar(), &TransportBar::loopToggled, m_loopAction, &QAction::setChecked);
 
-    view->setZoom(m_zoom);
-    connect(view, &ClipView::zoomAtRequested, this, [this](double factor, QPointF point) {
-        ViewZoom z = m_zoom;
+    connect(view, &ClipView::zoomAtRequested, this, [this, view](double factor, QPointF point) {
+        ViewZoom z = zoomOf(view->path());
         z.zoomAt(factor, point);
-        setZoom(z);
+        setZoom(z, view->path());
     });
-    connect(view, &ClipView::panRequested, this, [this](QPointF delta) {
-        ViewZoom z = m_zoom;
+    connect(view, &ClipView::panRequested, this, [this, view](QPointF delta) {
+        ViewZoom z = zoomOf(view->path());
         z.panBy(delta);
-        setZoom(z);
+        setZoom(z, view->path());
     });
     connect(c, &PlayerController::frameReady, this, [this, view] {
         if (view->path() == m_currentClip && !m_thumbnailTimer->isActive()) m_thumbnailTimer->start();
@@ -493,6 +508,7 @@ void MainWindow::showClips(QStringList paths, const QString& current) {
             if (view->open(path, m_positions.value(path, 0.0)) && m_playIntent)
                 view->controller()->play();
         }
+        view->setZoom(zoomOf(path));
         views << view;
     }
     qDeleteAll(spare);
@@ -518,6 +534,7 @@ void MainWindow::setCurrentClip(const QString& path) {
     m_currentClip = path;
     if (changed) updateThumbnail();
     m_infoPanel->setAnnotations(currentAnnotations());
+    m_infoPanel->setZoom(zoomOf(path));
     for (ClipView* view : m_views) {
         view->setCurrent(m_views.size() > 1 && view->path() == path);
         if (view->path() != path) continue;
@@ -641,11 +658,35 @@ void MainWindow::applyOverlay() {
     if (QAbstractButton* button = m_arrangementGroup->button(id)) button->setChecked(true);
 }
 
-void MainWindow::setZoom(ViewZoom zoom) {
+ViewZoom MainWindow::zoomOf(const QString& path) const {
+    return m_zoomLocked ? m_zoom : m_zooms.value(path, m_zoom);
+}
+
+void MainWindow::setZoom(ViewZoom zoom, const QString& path) {
     zoom.clamp();
-    m_zoom = zoom;
-    for (ClipView* view : m_views) view->setZoom(zoom);
-    m_infoPanel->setZoom(zoom);
+    if (m_zoomLocked) m_zoom = zoom;
+    else m_zooms.insert(path, zoom);
+    for (ClipView* view : m_views) {
+        if (m_zoomLocked || view->path() == path) view->setZoom(zoom);
+    }
+    if (m_zoomLocked || path == m_currentClip) m_infoPanel->setZoom(zoom);
+}
+
+// Unlocking starts every clip from the shared zoom; locking again makes the
+// current clip's zoom the shared one.
+void MainWindow::setZoomLocked(bool locked) {
+    m_infoPanel->setZoomLocked(locked);
+    if (locked == m_zoomLocked) return;
+    QSettings().setValue("zoom/locked", locked);
+    if (locked) {
+        const ViewZoom current = zoomOf(m_currentClip);
+        m_zoomLocked = true;
+        m_zooms.clear();
+        setZoom(current, m_currentClip);
+    } else {
+        m_zoomLocked = false;
+        m_zooms.clear(); // clips without an entry use m_zoom
+    }
 }
 
 AnnotationDoc* MainWindow::annotationsFor(const QString& path) {

@@ -20,6 +20,10 @@ public:
     bool isExpanded() const;
     void setExpanded(bool expanded);
 
+    // As wide as the open card even while folded, so the panel keeps one
+    // minimum width.
+    QSize minimumSizeHint() const override;
+
 private:
     QToolButton* m_header;
     QGroupBox*   m_body;
