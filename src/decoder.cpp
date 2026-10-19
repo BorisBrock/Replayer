@@ -168,11 +168,11 @@ bool Decoder::open(const QString& filename, double partStart, double partEnd) {
     return true;
 }
 
-bool Decoder::initHWContext(const AVCodec* codec) {
+const AVCodecHWConfig* Decoder::hardwareConfig(const AVCodec* codec, AVBufferRef** device) {
     // REPLAYER_HWDEC=none disables hardware decoding; any other value
     // (e.g. "vaapi", "cuda", "d3d11va", "videotoolbox") selects that device.
     const QString requested = qEnvironmentVariable("REPLAYER_HWDEC").toLower();
-    if (requested == "none" || requested == "no") return false;
+    if (requested == "none" || requested == "no") return nullptr;
 
     auto usable = [&](const AVCodecHWConfig* config) {
         if (!(config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX)) return false;
@@ -181,18 +181,21 @@ bool Decoder::initHWContext(const AVCodec* codec) {
         // Vulkan decoding is still less mature than the native APIs
         return config->device_type != AV_HWDEVICE_TYPE_VULKAN;
     };
-    auto use = [&](const AVCodecHWConfig* config) {
-        m_hwPixFmt = config->pix_fmt;
-        m_info.hwAccel = QString::fromUtf8(av_hwdevice_get_type_name(config->device_type));
-        return true;
-    };
 
     for (int i = 0; const AVCodecHWConfig* config = avcodec_get_hw_config(codec, i); i++) {
         if (!usable(config)) continue;
-        m_hwDeviceCtx = sharedHwDevice(config->device_type);
-        if (m_hwDeviceCtx) return use(config);
+        *device = sharedHwDevice(config->device_type);
+        if (*device) return config;
     }
-    return false;
+    return nullptr;
+}
+
+bool Decoder::initHWContext(const AVCodec* codec) {
+    const AVCodecHWConfig* config = hardwareConfig(codec, &m_hwDeviceCtx);
+    if (!config) return false;
+    m_hwPixFmt = config->pix_fmt;
+    m_info.hwAccel = QString::fromUtf8(av_hwdevice_get_type_name(config->device_type));
+    return true;
 }
 
 bool Decoder::openCodec(const AVCodec* codec) {
