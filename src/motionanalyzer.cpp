@@ -154,6 +154,21 @@ struct Reader {
         return AV_PIX_FMT_NONE;
     }
 
+    // The first sample slot after each keyframe, from the container index
+    std::vector<int64_t> keyframeSlots() const {
+        std::vector<int64_t> keySlots;
+        AVStream* stream = fmt->streams[streamIndex];
+        const int entries = avformat_index_get_entries_count(stream);
+        for (int i = 0; i < entries; i++) {
+            const AVIndexEntry* entry = avformat_index_get_entry(stream, i);
+            if (!entry || !(entry->flags & AVINDEX_KEYFRAME)) continue;
+            const double time = entry->timestamp * timeBase - startTime;
+            keySlots.push_back(static_cast<int64_t>(std::ceil(time / kSampleInterval - 1e-6)));
+        }
+        std::sort(keySlots.begin(), keySlots.end());
+        return keySlots;
+    }
+
     // Whether the GPU really decodes the stream, from its first frame
     bool decodesInHardware() {
         if (hwFormat == AV_PIX_FMT_NONE) return false;
@@ -264,10 +279,20 @@ std::vector<Thumb> readThumbs(const QString& path, const std::atomic<bool>& canc
     const bool hardware = first->decodesInHardware();
     const int64_t slotCount = slotOf(duration) + 1;
     int workers = hardware ? kHardwareWorkers : std::min(cores, kMaxWorkers);
-    // Two chunks per worker even out their speeds (motion is slower to decode)
+    // Two chunks per worker even out their speeds (motion is slower to
+    // decode). Each starts just after a keyframe where it can, so a worker
+    // seeking there has next to nothing to decode before it.
     const int64_t minChunk = static_cast<int64_t>(std::ceil(kMinChunk / kSampleInterval));
     const int64_t chunk = std::max(minChunk, (slotCount + 2 * workers - 1) / (2 * workers));
-    const int64_t chunks = (slotCount + chunk - 1) / chunk;
+    const std::vector<int64_t> keySlots = first->keyframeSlots();
+    std::vector<int64_t> starts{0};
+    for (int64_t want = chunk; want < slotCount; want += chunk) {
+        const auto after = std::upper_bound(keySlots.begin(), keySlots.end(), want);
+        const int64_t start = after != keySlots.begin() && *std::prev(after) > starts.back() ? *std::prev(after) : want;
+        if (start > starts.back()) starts.push_back(start);
+    }
+    starts.push_back(slotCount);
+    const int64_t chunks = static_cast<int64_t>(starts.size()) - 1;
     workers = static_cast<int>(std::min<int64_t>(workers, chunks));
     const int threads = std::max(1, cores / workers);
     if (!hardware && (threads != cores || first->hwFormat != AV_PIX_FMT_NONE)) {
@@ -290,8 +315,7 @@ std::vector<Thumb> readThumbs(const QString& path, const std::atomic<bool>& canc
             while (!failed && !cancel) {
                 const int64_t c = nextChunk++;
                 if (c >= chunks) break;
-                const int64_t from = c * chunk;
-                if (!reader->readSlots(from, std::min(slotCount, from + chunk) - 1, cancel, results[w], progressMs))
+                if (!reader->readSlots(starts[c], starts[c + 1] - 1, cancel, results[w], progressMs))
                     failed = true;
             }
             running--;
