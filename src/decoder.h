@@ -41,6 +41,11 @@ public:
     // Reads just the container header; thread-safe. Returns -1 on failure.
     static double probeDuration(const QString& filename);
 
+    // The hardware decoder to use for codec, if any (not with
+    // REPLAYER_HWDEC=none). Sets device to a new reference to it, shared by
+    // all decoders, which the caller unrefs.
+    static const AVCodecHWConfig* hardwareConfig(const AVCodec* codec, AVBufferRef** device);
+
     bool isOpen() const { return m_fmtCtx != nullptr; }
     const VideoInfo& info() const { return m_info; }
 
