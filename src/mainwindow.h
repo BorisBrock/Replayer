@@ -59,6 +59,7 @@ private:
     QWidget* createCompareBar();
 
     void showClips(QStringList paths, const QString& current);
+    void splitClip(const QString& path);
     ClipView* createView();
     void setCurrentClip(const QString& path);
     void rememberPosition(ClipView* view);

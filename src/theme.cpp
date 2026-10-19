@@ -131,14 +131,14 @@ QString styleSheet(const AccentColors& a) {
         QSlider::sub-page:horizontal:disabled { background: @track; }
         QSlider::handle:horizontal:disabled { background: @textDisabled; border-color: @textDisabled; }
 
-        /* Clip list */
-        QListWidget {
+        /* Clip list (parts of split clips are indented below their clip) */
+        QTreeWidget#ClipList {
             background: @base; border: 1px solid @border; border-radius: 10px;
             padding: 4px; outline: none;
         }
-        QListWidget::item { padding: 8px 10px; border-radius: 6px; margin: 1px 0; }
-        QListWidget::item:hover { background: @surface; }
-        QListWidget::item:selected { background: @selection; color: @onSelection; }
+        QTreeWidget#ClipList::item { padding: 8px 10px; border-radius: 6px; margin: 1px 0; }
+        QTreeWidget#ClipList::item:hover { background: @surface; }
+        QTreeWidget#ClipList::item:selected { background: @selection; color: @onSelection; }
 
         /* Collapsible side panel cards: the header above takes the title's place */
         QGroupBox {
@@ -379,6 +379,17 @@ void paintIcon(QPainter& p, Theme::Icon which) {
             s.moveTo(6.5, 7); s.lineTo(7.5, 19.5); s.lineTo(16.5, 19.5); s.lineTo(17.5, 7);
             s.moveTo(10.5, 10.5); s.lineTo(10.5, 16);
             s.moveTo(13.5, 10.5); s.lineTo(13.5, 16);
+            return s;
+        }(), 1.8);
+        break;
+    case Theme::Icon::Cut:
+        // Scissors: two finger rings, blades crossing above them
+        stroke([] {
+            QPainterPath s;
+            s.addEllipse(QPointF(7, 17.5), 3, 3);
+            s.addEllipse(QPointF(17, 17.5), 3, 3);
+            s.moveTo(9, 15.3); s.lineTo(17.5, 4);
+            s.moveTo(15, 15.3); s.lineTo(6.5, 4);
             return s;
         }(), 1.8);
         break;

@@ -27,7 +27,10 @@ public:
     // Must be called before open(). The queue must remain valid until close().
     void setQueue(FrameQueue* queue);
 
-    bool open(const QString& filename);
+    // Opens filename, or just the part of it from partStart to partEnd
+    // (seconds; -1: to the end of the file). Timestamps and the duration are
+    // then relative to partStart, and the stream ends at partEnd.
+    bool open(const QString& filename, double partStart = 0.0, double partEnd = -1.0);
     void close();
 
     // Seek to timestamp (seconds since stream start). Frames decoded after the
@@ -62,7 +65,9 @@ private:
 
     int       m_videoStream = -1;
     double    m_timeBase    = 0.0; // seconds per stream tick
-    double    m_startTime   = 0.0; // stream start in seconds
+    double    m_startTime   = 0.0; // stream start (plus the part's start) in seconds
+    double    m_partStart   = 0.0; // where the part opened starts in the file
+    bool      m_partEnds    = false; // frames from m_info.duration on are not played
     double    m_lastPts     = 0.0;
     VideoInfo m_info;
 

@@ -22,7 +22,8 @@ public:
     explicit PlayerController(QObject* parent = nullptr);
     ~PlayerController() override;
 
-    bool openFile(const QString& filename);
+    // Opens filename, or the part of it from start to end (see Decoder::open).
+    bool openFile(const QString& filename, double start = 0.0, double end = -1.0);
     void closeFile();
 
     void play();

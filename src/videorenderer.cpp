@@ -176,6 +176,9 @@ VideoRenderer::VideoRenderer(QWidget* parent)
 
 VideoRenderer::~VideoRenderer() {
     releaseGL();
+    // ~QOpenGLWidget destroys the context after this, which must no longer
+    // call back into this half-destroyed object.
+    if (context()) disconnect(context(), nullptr, this, nullptr);
 }
 
 void VideoRenderer::setFrame(const FramePtr& frame) {
