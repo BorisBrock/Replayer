@@ -115,8 +115,7 @@ the ideal line or the spot where you should have popped. Every clip keeps
 its own drawings, and they stay in place when you zoom and pan. Made a
 mistake? Undo, redo or clear with one click.
 
-Want to share it? Right-click the clip and choose *Export frame as .png...*
-to save the frame at full resolution, with your drawings and measurements.
+Want to share it? See *Export your best moments* below.
 
 <p align="center">
   <img src="docs/images/drawing.png" alt="Selectable accent colours" width="100%">
@@ -139,6 +138,14 @@ Click a point – say, your front tyre – and set marker A. Step forward a
 few frames, click the same point again and set marker B. Replayer turns the
 distance and the time between the two frames into your speed, in km/h or
 mph. Find out how fast you really were on the take-off.
+
+### 📤 Export your best moments
+
+Press Ctrl+E to save a frame as PNG or JPEG, or a part of the clip as an
+MP4 video or a GIF animation. Set the start and end markers right in the
+export dialog, slow it down up to 20x, scale it down for sharing, and choose
+whether your drawings, measurements and a time stamp are burnt in. Ready for
+your group chat in seconds.
 
 ### 🎨 Modern dark UI with your favourite colour
 
@@ -220,6 +227,7 @@ If Replayer helps you land that jump, you can buy me a coffee. Thank you!
 | Down / Up (PgDn / PgUp) | Next / previous clip                |
 | Ctrl+click, Shift+click | Select clips to compare             |
 | Right-click a clip      | Split, color or hide a clip         |
+| Ctrl+E                  | Export a frame, video or GIF        |
 | Space                   | Play / pause                        |
 | S                       | Stop (rewind to start)              |
 | L                       | Loop clip on / off                  |

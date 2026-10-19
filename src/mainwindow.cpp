@@ -274,6 +274,12 @@ void MainWindow::createActions() {
     addAction(fileMenu, "Open &Folder...", {QKeySequence("Ctrl+O")}, [this] { onOpenFolder(); });
     addAction(fileMenu, "Open F&ile...", {QKeySequence("Ctrl+Shift+O")}, [this] { onOpenFile(); });
     fileMenu->addSeparator();
+    addAction(fileMenu, "&Export...", {QKeySequence("Ctrl+E")}, [this] {
+        for (ClipView* view : m_views) {
+            if (view->path() == m_currentClip) view->showExportDialog();
+        }
+    });
+    fileMenu->addSeparator();
     addAction(fileMenu, "&Quit", {QKeySequence("Ctrl+Q")}, [this] { close(); });
 
     // Annotations (drawings and measurements) of the current clip

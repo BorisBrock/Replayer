@@ -22,8 +22,9 @@ bool isRenderablePixelFormat(int format);
 QImage makeThumbnail(const AVFrame* frame, int maxWidth);
 
 // Full-size RGB copy of a frame, stretched to its display aspect ratio and
-// converted with the frame's colour space and range (not rotated)
-QImage frameToImage(const AVFrame* frame);
+// converted with the frame's colour space and range (not rotated). With a
+// size, scaled to that instead.
+QImage frameToImage(const AVFrame* frame, QSize size = QSize());
 
 struct VideoInfo {
     QString codec;

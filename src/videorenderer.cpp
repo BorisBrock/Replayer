@@ -712,15 +712,22 @@ QImage VideoRenderer::renderImage(const FramePtr& frame) const {
             p.drawImage(target, ghost);
         }
     }
-    if (!m_annotations || m_annotations->items().isEmpty()) return image;
+    const QImage drawings = renderAnnotations(image.size());
+    if (!drawings.isNull()) QPainter(&image).drawImage(0, 0, drawings);
+    return image;
+}
 
-    // Lay the drawings out as on screen without zoom, then scale that up to
-    // the frame, so line widths and labels keep their size relative to it.
+QImage VideoRenderer::renderAnnotations(QSize size) const {
+    if (!m_annotations || m_annotations->items().isEmpty() || size.isEmpty()) return {};
+    // Lay the drawings out as on screen without zoom, then scale that to
+    // size, so line widths and labels keep their size relative to the frame.
     const QSizeF area = videoArea();
-    if (area.isEmpty()) return image;
+    if (area.isEmpty()) return {};
+    QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
     QPainter p(&image);
     p.setFont(font());
-    p.scale(image.width() / area.width(), image.height() / area.height());
+    p.scale(size.width() / area.width(), size.height() / area.height());
     paintAnnotations(p, QTransform::fromScale(area.width(), area.height()), QRectF(QPointF(), area), false);
     return image;
 }
