@@ -24,6 +24,8 @@
 #include <QMessageBox>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QScreen>
+#include <QScrollArea>
 #include <QSettings>
 #include <QShortcut>
 #include <QSlider>
@@ -80,7 +82,9 @@ ExportDialog::ExportDialog(ClipView* source, QWidget* parent)
     : QDialog(parent), m_source(source), m_path(source->path()) {
     const ClipRef clip = ClipRef::fromKey(m_path);
     setWindowTitle(QString("Export %1").arg(clip.displayName()));
-    resize(1180, 760);
+    // Smaller screens, or large scaling, get what fits; the settings scroll
+    const QRect screenArea = (parent ? parent : source)->screen()->availableGeometry();
+    resize(std::min(1180, screenArea.width() * 95 / 100), std::min(760, screenArea.height() * 90 / 100));
     m_pool.setMaxThreadCount(1);
 
     const VideoInfo& info = source->controller()->videoInfo();
@@ -122,12 +126,24 @@ ExportDialog::ExportDialog(ClipView* source, QWidget* parent)
     left->addLayout(row);
     layout->addLayout(left, 1);
 
-    // Right: the settings
-    auto* right = new QVBoxLayout();
-    right->setSpacing(6);
+    // Right: the settings, which scroll when the dialog is too low for
+    // them, and below them the progress and the buttons
     auto* panel = new QWidget(this);
-    panel->setFixedWidth(340);
-    panel->setLayout(right);
+    panel->setFixedWidth(350);
+    auto* side = new QVBoxLayout(panel);
+    side->setContentsMargins(0, 0, 0, 0);
+    side->setSpacing(6);
+    auto* scroll = new QScrollArea(panel);
+    scroll->setObjectName("SidePanel"); // the side panel's look
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* settingsPanel = new QWidget(scroll);
+    auto* right = new QVBoxLayout(settingsPanel);
+    right->setContentsMargins(0, 0, 10, 0); // room for the scroll bar
+    right->setSpacing(6);
+    scroll->setWidget(settingsPanel);
+    side->addWidget(scroll, 1);
     layout->addWidget(panel);
 
     auto addCard = [&](const QString& title, QWidget** container) {
@@ -166,7 +182,6 @@ ExportDialog::ExportDialog(ClipView* source, QWidget* parent)
     m_formatHint = new QLabel(formatCard);
     m_formatHint->setObjectName("MutedLabel");
     m_formatHint->setWordWrap(true);
-    m_formatHint->setMinimumHeight(m_formatHint->fontMetrics().lineSpacing() * 2);
     formatLayout->addWidget(m_formatHint);
 
     // Picture
@@ -228,14 +243,14 @@ ExportDialog::ExportDialog(ClipView* source, QWidget* parent)
     m_progress->setTextVisible(false);
     m_progress->setFixedHeight(8);
     m_progress->hide();
-    right->addWidget(m_progress);
+    side->addWidget(m_progress);
     m_status = new QLabel(panel);
     m_status->setWordWrap(true);
     m_status->setTextFormat(Qt::PlainText);
-    right->addWidget(m_status);
+    side->addWidget(m_status);
     m_showButton = new QPushButton("Show in Folder", panel);
     m_showButton->hide();
-    right->addWidget(m_showButton, 0, Qt::AlignLeft);
+    side->addWidget(m_showButton, 0, Qt::AlignLeft);
 
     auto* buttons = new QDialogButtonBox(panel);
     m_exportButton = new QPushButton("Export...", buttons);
@@ -243,8 +258,8 @@ ExportDialog::ExportDialog(ClipView* source, QWidget* parent)
     m_exportButton->setDefault(true);
     buttons->addButton(m_exportButton, QDialogButtonBox::ActionRole);
     buttons->addButton(new QPushButton("Close", buttons), QDialogButtonBox::RejectRole);
-    right->addSpacing(8);
-    right->addWidget(buttons);
+    side->addSpacing(8);
+    side->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(m_exportButton, &QPushButton::clicked, this, [this] {
         if (m_exporting) stopExport();
@@ -350,6 +365,21 @@ ExportDialog::~ExportDialog() {
 void ExportDialog::addShortcut(const QKeySequence& key, const std::function<void()>& fn) {
     auto* shortcut = new QShortcut(key, this);
     connect(shortcut, &QShortcut::activated, this, fn);
+}
+
+void ExportDialog::showEvent(QShowEvent* event) {
+    QDialog::showEvent(event);
+    // Laid out by now: reserve the height of the longest format hint, which a
+    // word-wrapped label doesn't always get by itself (larger fonts), and
+    // which keeps the cards below from jumping when the format changes
+    const int width = m_formatHint->contentsRect().width();
+    int height = 0;
+    for (const FormatInfo& info : kFormats) {
+        height = std::max(height, m_formatHint->fontMetrics()
+                                      .boundingRect(QRect(0, 0, width, 10000), Qt::TextWordWrap, info.hint)
+                                      .height());
+    }
+    m_formatHint->setMinimumHeight(height);
 }
 
 void ExportDialog::done(int result) {

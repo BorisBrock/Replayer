@@ -33,6 +33,7 @@ public:
 
 protected:
     void done(int result) override;
+    void showEvent(QShowEvent* event) override;
 
 private:
     void addShortcut(const QKeySequence& key, const std::function<void()>& fn);
