@@ -14,7 +14,7 @@ overview of what Replayer can do, see the [README](../README.md).
 - [Drawing](#drawing)
 - [Measuring distances](#measuring-distances)
 - [Measuring speed](#measuring-speed)
-- [Exporting a frame](#exporting-a-frame)
+- [Exporting](#exporting)
 - [Full screen](#full-screen)
 - [Settings](#settings)
 - [Keyboard and mouse](#keyboard-and-mouse)
@@ -253,8 +253,8 @@ to blend, to split and back to tiles.
 
 The second clip's tile shrinks to its title and controls below the overlay;
 use them to line the clips up as usual. Overlay works best with clips from a
-camera that didn't move. Exporting a frame (right-click) saves the overlay
-as you see it.
+camera that didn't move. *Export Frame as Image...* (right-click) saves the
+overlay as you see it.
 
 ---
 
@@ -391,12 +391,65 @@ Choose between km/h and mph in *View → Units*.
 
 ---
 
-## Exporting a frame
+## Exporting
 
-Right-click the video and choose **Export frame as .png...** to save the frame
-under the mouse pointer at full video resolution, including its drawings and
-measurements. Replayer suggests a file name with the clip name and time, e.g.
-`GX010123_00-12.345.png`, in the clip's folder.
+Choose *File → Export...* (Ctrl+E), or right-click the video and choose
+**Export...**, to save the current clip as an image, a video or an animation.
+The export dialog has a player of its own, so you can pick the frame or the
+part to export without losing your place in the main window.
+
+**Format**
+
+- **PNG image**: the frame shown, lossless, for the sharpest picture.
+- **JPEG image**: the frame shown, compressed to a much smaller file.
+- **MP4 video**: the part between the start and end marker, as H.264 video
+  that plays almost anywhere.
+- **GIF animation**: the part between the markers, as an animation that plays
+  in any browser or chat. Keep GIFs short and small: they get large quickly.
+
+**The part to export** (MP4 and GIF): drag the start and end markers on the
+timeline below the player, or play the clip and press **Set Start** (I) and
+**Set End** (O) at the right frames. The frames at both markers are included.
+**Whole Clip** selects everything again. With the player's loop button on,
+playback loops just the part between the markers.
+
+**Picture**
+
+- **Drawings and measurements**: include the clip's drawings, as they look in
+  the main window. The preview shows them while this is on.
+- **Time stamp**: burn the time into the bottom left corner, either the
+  position in the clip or the time since the start marker. In slow motion,
+  the speed is shown next to it.
+- **Size**: the clip's own size, or a smaller one for sharing.
+- **Quality** (JPEG and MP4): higher means a better picture and a larger file.
+
+**Motion** (MP4 and GIF)
+
+- **Speed**: export in real time, or slowed down up to 20 times. A 240 fps
+  clip exported at 1/4× and 60 fps shows every frame once, in smooth slow
+  motion.
+- **Frame rate**: the frame rate of the export. The summary below the
+  settings says how the clip's frames map to the export's, e.g. that every
+  4th frame is used.
+- **Play over and over** (GIF): loop the animation.
+- **Dither for smoother colours** (GIF): a GIF has 256 colours; dithering
+  hides the banding in skies and shadows, at the cost of a slightly larger
+  file.
+
+Press **Export...**, choose where to save, and follow the progress below the
+settings; **Stop** cancels it. Replayer suggests a file name with the clip name
+and time, e.g. `GX010123_00-12.345.mp4`, in the folder of the last export.
+Afterwards, **Show in Folder** opens that folder. The dialog remembers your
+settings for the next export.
+
+To save a single frame quickly, right-click the video and choose **Export
+Frame as Image...**: it saves the frame under the mouse pointer at full
+resolution, as PNG or JPEG, with its drawings and, when comparing clips with
+the ghost overlay, the overlay as you see it.
+
+MP4 videos are encoded with x264 where available, else with the encoder of
+your graphics card or system (NVIDIA, Intel, AMD, Windows Media Foundation).
+Exports have no sound.
 
 ---
 
@@ -434,6 +487,7 @@ Replayer remembers these settings between sessions:
 |-------------------------|--------------------------------------------|
 | Ctrl+O                  | Open folder                                |
 | Ctrl+Shift+O            | Open a single file (and its folder)        |
+| Ctrl+E                  | Export the current clip                    |
 | Ctrl+Q                  | Quit                                       |
 | Down / Up, PgDn / PgUp  | Next / previous clip                       |
 | Space                   | Play / pause                               |
@@ -462,6 +516,14 @@ In the split dialog, the playback keys work too, plus:
 | Enter                   | Apply the split                            |
 | Esc                     | Cancel                                     |
 
+In the export dialog, the playback keys work too, plus:
+
+| Key                     | Action                                     |
+|-------------------------|--------------------------------------------|
+| I                       | Set the start marker at the current frame  |
+| O                       | Set the end marker at the current frame    |
+| Esc                     | Close (asks first while exporting)         |
+
 ### Mouse
 
 | Where              | Action                         | Function                               |
@@ -477,7 +539,8 @@ In the split dialog, the playback keys work too, plus:
 | Video              | Drag with a tool picked        | Draw or measure                        |
 | Video              | Double-click                   | Toggle full screen (no tool picked)    |
 | Ghost overlay line | Drag, double-click             | Change the mix or split; back to 50/50 |
-| Video              | Right-click                    | Export the frame as .png               |
+| Video              | Right-click                    | Export the clip, or just the frame     |
+| Export timeline    | Click, drag a marker           | Seek, move the start or end marker     |
 | Seek bar           | Click or drag                  | Jump to that position                  |
 | Zoom navigator     | Click, drag or mouse wheel     | Move the zoomed region, zoom           |
 | Window             | Drop a folder or file          | Open it                                |

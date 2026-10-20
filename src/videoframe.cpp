@@ -51,12 +51,16 @@ QImage makeThumbnail(const AVFrame* frame, int maxWidth) {
     return image;
 }
 
-QImage frameToImage(const AVFrame* frame) {
+QImage frameToImage(const AVFrame* frame, QSize size) {
     if (!frame || frame->width <= 0 || frame->height <= 0) return {};
     int w = frame->width;
     if (frame->sample_aspect_ratio.num > 0 && frame->sample_aspect_ratio.den > 0)
         w = std::max(1, static_cast<int>(std::lround(w * av_q2d(frame->sample_aspect_ratio))));
-    const int h = frame->height;
+    int h = frame->height;
+    if (!size.isEmpty()) {
+        w = size.width();
+        h = size.height();
+    }
 
     SwsContext* sws = sws_getContext(frame->width, frame->height, static_cast<AVPixelFormat>(frame->format),
                                      w, h, AV_PIX_FMT_RGB32, SWS_BICUBIC, nullptr, nullptr, nullptr);

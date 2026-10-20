@@ -1,5 +1,6 @@
 #include "clipview.h"
 #include "clipref.h"
+#include "exportdialog.h"
 #include "playercontroller.h"
 #include "theme.h"
 #include "timeformat.h"
@@ -127,6 +128,22 @@ FramePtr ClipView::currentFrame() const {
     return m_videoRenderer->frame();
 }
 
+QSizeF ClipView::displaySize() const {
+    return m_videoRenderer->frame() ? m_videoRenderer->displaySize() : QSizeF();
+}
+
+QImage ClipView::renderAnnotations(QSize size) const {
+    return m_videoRenderer->renderAnnotations(size);
+}
+
+void ClipView::showExportDialog() {
+    if (!currentFrame()) return;
+    emit playRequested(false);
+    m_controller->pause();
+    ExportDialog dialog(this, window());
+    dialog.exec();
+}
+
 void ClipView::setZoom(const ViewZoom& zoom) {
     m_videoRenderer->setZoom(zoom);
 }
@@ -217,9 +234,13 @@ void ClipView::contextMenuEvent(QContextMenuEvent* event) {
     const FramePtr frame = currentFrame();
     const double position = m_controller->position();
     QMenu menu(this);
-    QAction* exportAction = menu.addAction("Export frame as .png...");
+    QAction* exportAction = menu.addAction("Export...");
+    exportAction->setShortcut(QKeySequence("Ctrl+E"));
     exportAction->setEnabled(frame != nullptr);
-    connect(exportAction, &QAction::triggered, this, [this, frame, position] { exportFrame(frame, position); });
+    connect(exportAction, &QAction::triggered, this, &ClipView::showExportDialog);
+    QAction* frameAction = menu.addAction("Export Frame as Image...");
+    frameAction->setEnabled(frame != nullptr);
+    connect(frameAction, &QAction::triggered, this, [this, frame, position] { exportFrame(frame, position); });
     menu.exec(event->globalPos());
 }
 
@@ -234,9 +255,12 @@ void ClipView::exportFrame(const FramePtr& frame, double position) {
     const QFileInfo clip(ref.path);
     const QString name = QString("%1_%2.png").arg(clip.completeBaseName(),
                                                   formatTime(ref.start + position).replace(':', '-'));
+    QString filter;
     const QString file = QFileDialog::getSaveFileName(this, "Export Frame", clip.dir().filePath(name),
-                                                      "PNG Images (*.png)");
+                                                      "PNG Images (*.png);;JPEG Images (*.jpg *.jpeg)", &filter);
     if (file.isEmpty()) return;
-    if (!image.save(file, "PNG"))
+    const QString suffix = QFileInfo(file).suffix().toLower();
+    const bool jpeg = suffix == "jpg" || suffix == "jpeg" || (suffix.isEmpty() && filter.startsWith("JPEG"));
+    if (!image.save(file, jpeg ? "JPEG" : "PNG", jpeg ? 92 : -1))
         emit errorOccurred(QString("Could not save %1").arg(QDir::toNativeSeparators(file)));
 }

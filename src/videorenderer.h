@@ -33,6 +33,9 @@ public:
     // frame at full size, rotated, with the ghost over it as on screen and
     // this clip's drawings as they look unzoomed; null if there is no frame
     QImage renderImage(const FramePtr& frame) const;
+    // Just this clip's drawings, laid out as they look unzoomed and scaled
+    // to size, on transparent; null if there are none
+    QImage renderAnnotations(QSize size) const;
 
 public slots:
     void setFrame(const FramePtr& frame);

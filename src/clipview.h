@@ -32,6 +32,14 @@ public:
     PlayerController* controller() const { return m_controller; }
     TransportBar* transportBar() const { return m_transportBar; }
     FramePtr currentFrame() const;
+    AnnotationDoc* annotations() const { return m_annotations; }
+    // The video's size in pixels, after aspect ratio and rotation; empty
+    // without a frame
+    QSizeF displaySize() const;
+    // The drawings as in this view, unzoomed, scaled to size (see VideoRenderer)
+    QImage renderAnnotations(QSize size) const;
+    // Opens the export dialog for this clip, at its current frame
+    void showExportDialog();
 
     // Compact: tile look with a title header and smaller controls.
     void setCompact(bool compact);
@@ -64,6 +72,7 @@ protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
 
 private:
+    // Saves frame as it looks here, with the ghost over it
     void exportFrame(const FramePtr& frame, double position);
     void setStyleProperty(const char* name, bool value);
     void addAnnotation(Annotation annotation);
