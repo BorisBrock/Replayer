@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  QT_VERSION: 6.10.3
+  QT_VERSION: 6.12.0
   # Shared LGPL build with MSVC import libraries, see build.ps1
   FFMPEG_ARCHIVE: ffmpeg-n9.0-latest-win64-lgpl-shared-9.0
   # Empty outside of releases, then CMakeLists.txt derives it from the tags
@@ -40,11 +40,15 @@ jobs:
           fetch-depth: 0
 
       - name: Install Qt
-        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
+        uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4.5.0
         with:
           version: ${{ env.QT_VERSION }}
           arch: win64_msvc2022_64
           cache: true
+          # Since Qt 6.11 the Windows packages are in a folder per arch, which
+          # aqtinstall 3.3.0 (the latest release) can't find yet. Use a pinned
+          # commit of its master branch until a release supports it.
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@5a49f2b391ae8ee1d3c0dd87f8b33c1d49a4deb7
 
       - name: Download FFmpeg
         shell: pwsh
@@ -87,7 +91,7 @@ jobs:
 
       # The same Qt as on Windows, instead of Ubuntu's older Qt 6.4
       - name: Install Qt
-        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
+        uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4.5.0
         with:
           version: ${{ env.QT_VERSION }}
           arch: linux_gcc_64
